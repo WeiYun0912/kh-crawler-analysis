@@ -1979,9 +1979,9 @@ function render(jsonData) {
     </div>
   `;
 
-  // HTML preview (iframes)
-  document.getElementById('previewBefore').srcdoc = wrapForPreview(analysis.html, analysis.url);
-  document.getElementById('previewAfter').srcdoc = wrapForPreview(applied.html, analysis.url);
+  // HTML preview (iframes) — 用 replaceIframe 避免 Chromium 對「重複 set srcdoc」的 race bug
+  replaceIframe('previewBefore', wrapForPreview(analysis.html, analysis.url));
+  replaceIframe('previewAfter', wrapForPreview(applied.html, analysis.url));
 
   // Markdown 對比 (production hash 真正比的東西) — 用 line-level diff highlighting
   const mdBefore = applied.beforeMarkdown || '';
@@ -2115,6 +2115,20 @@ function formatHtml(html) {
     .replace(/></g, '>\n<')
     .replace(/\n{2,}/g, '\n')
     .slice(0, 30000); // safety
+}
+
+// 取代既有 iframe（避免 Chromium 重複 set srcdoc 時 srcdoc 內容不更新的 bug）
+function replaceIframe(id, srcdoc) {
+  const old = document.getElementById(id);
+  if (!old) return;
+  // 複製除 srcdoc 之外的所有屬性 + class
+  const fresh = document.createElement('iframe');
+  for (const attr of old.attributes) {
+    if (attr.name === 'srcdoc') continue;
+    fresh.setAttribute(attr.name, attr.value);
+  }
+  fresh.srcdoc = srcdoc;
+  old.parentNode.replaceChild(fresh, old);
 }
 
 // 把 raw scraped html 包成可以單獨在 iframe 渲染的完整文件

@@ -1,0 +1,27 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Drag Test</title>
+<style>
+body { font-family: monospace; padding: 24px; }
+#dz { border: 3px dashed #888; padding: 60px; text-align: center; font-size: 18px; }
+#dz.over { border-color: red; background: #ffe; }
+#log { margin-top: 20px; font-size: 12px; white-space: pre; max-height: 400px; overflow: auto; background: #fafafa; padding: 12px; border: 1px solid #ccc; }
+</style></head><body>
+<h1>Minimal Drag Test</h1>
+<p>把任何檔案拖到下面方框，觀察 log 區域。</p>
+<div id="dz">拖檔案到這裡</div>
+<div id="log">--- log 區 ---</div>
+<script>
+const dz = document.getElementById('dz');
+const log = document.getElementById('log');
+function L(m) { log.textContent += '\n' + new Date().toISOString().slice(11,19) + ' ' + m; log.scrollTop = log.scrollHeight; }
+L('script loaded, dz=' + dz);
+['dragenter','dragover','dragleave','drop'].forEach(ev => {
+  dz.addEventListener(ev, e => {
+    e.preventDefault();
+    L(ev + (ev==='drop' ? ' (files=' + (e.dataTransfer?.files?.length || 0) + ')' : ''));
+    if (ev === 'dragenter' || ev === 'dragover') dz.classList.add('over');
+    if (ev === 'dragleave' || ev === 'drop') dz.classList.remove('over');
+  });
+});
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { e.preventDefault(); L('window drop fired'); });
+</script></body></html>

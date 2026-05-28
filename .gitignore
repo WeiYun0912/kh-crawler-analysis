@@ -1,0 +1,27 @@
+# Node
+node_modules/
+
+# 爬蟲資料快照（每組數百~數千個檔案、各約 10 MB）
+busker-*/
+coia-*/
+*-first-time/
+*-second-time/
+
+# 分析輸出
+diff-details/
+compare-result-*.xlsx
+compare-report.*
+hash-diff-pairs.md
+
+# 壓縮快照
+*.zip
+
+# 開發環境 / 暫存
+.claude/
+.DS_Store
+*.log
+*.tmp
+
+# 樣本 / 偵錯用個別檔案（root 散落的單一 JSON）
+/coia_kcg_gov_tw_*.json
+/busker_kcg_gov_tw_*.json

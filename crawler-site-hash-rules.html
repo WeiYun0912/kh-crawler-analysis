@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>爬蟲站點專屬 Hash 清洗規則 · Specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #F4EFE4;
+  --paper-warm: #EFE8D9;
+  --ink: #1B1612;
+  --ink-quiet: #5C5249;
+  --ink-faint: #8B7E70;
+  --rule: #C9BFAE;
+  --rule-soft: #E0D6C2;
+  --oxblood: #7A1818;
+  --oxblood-soft: rgba(122, 24, 24, 0.08);
+  --forest: #2C4A33;
+  --code-bg: #1F1B17;
+  --code-ink: #E8DEC8;
+  --code-comment: #8B7E70;
+  --code-keyword: #D69E5C;
+  --code-string: #A8C99B;
+  --display: 'Fraunces', 'Noto Serif TC', serif;
+  --body: 'Newsreader', 'Noto Serif TC', serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 32px;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.65;
+  font-feature-settings: "kern", "liga", "calt";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Subtle paper texture */
+  background-image:
+    radial-gradient(rgba(28, 22, 18, 0.018) 1px, transparent 1px),
+    radial-gradient(rgba(28, 22, 18, 0.012) 1px, transparent 1px);
+  background-size: 3px 3px, 7px 7px;
+  background-position: 0 0, 1.5px 1.5px;
+}
+
+/* ─────────── Progress Bar ─────────── */
+.progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: var(--oxblood);
+  width: 0%;
+  z-index: 100;
+  transition: width 0.1s ease-out;
+}
+
+/* ─────────── Layout ─────────── */
+.layout {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 48px;
+}
+
+/* ─────────── Cover / Header ─────────── */
+.cover {
+  padding: 120px 0 80px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 80px;
+  position: relative;
+}
+
+.cover::before {
+  content: '';
+  position: absolute;
+  top: 80px; left: 0;
+  width: 120px;
+  height: 1px;
+  background: var(--oxblood);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--oxblood);
+  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.eyebrow .dot {
+  width: 6px; height: 6px;
+  background: var(--oxblood);
+  border-radius: 50%;
+}
+
+.cover h1 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: clamp(48px, 7vw, 92px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin: 0 0 32px;
+  font-variation-settings: "opsz" 144;
+}
+
+.cover h1 .italic {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--oxblood);
+}
+
+.lede {
+  font-family: var(--body);
+  font-size: 22px;
+  line-height: 1.5;
+  font-weight: 400;
+  max-width: 680px;
+  color: var(--ink);
+  margin: 0 0 64px;
+  font-style: italic;
+}
+
+.cover-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 32px 48px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  max-width: 900px;
+}
+
+.cover-meta dt {
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  margin-bottom: 6px;
+}
+
+.cover-meta dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.cover-meta .status {
+  color: var(--forest);
+}
+
+/* ─────────── Main Layout (TOC + content) ─────────── */
+.body-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 80px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .body-grid { grid-template-columns: 1fr; gap: 48px; }
+}
+
+/* ─────────── Table of Contents ─────────── */
+.toc {
+  position: sticky;
+  top: 32px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding-right: 16px;
+  border-right: 1px solid var(--rule-soft);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+.toc::-webkit-scrollbar { width: 4px; }
+.toc::-webkit-scrollbar-thumb { background: var(--rule); }
+
+.toc-title {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 20px;
+  display: block;
+}
+
+.toc ol {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: toc;
+}
+
+.toc li {
+  counter-increment: toc;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.toc a {
+  color: var(--ink-quiet);
+  text-decoration: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  transition: color 0.15s ease;
+  line-height: 1.35;
+  padding: 2px 0;
+}
+
+.toc a::before {
+  content: counter(toc, decimal-leading-zero);
+  color: var(--ink-faint);
+  font-size: 10px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.toc a:hover,
+.toc a.active {
+  color: var(--oxblood);
+}
+
+.toc a.active {
+  font-weight: 500;
+}
+
+.toc a.active::before {
+  color: var(--oxblood);
+}
+
+@media (max-width: 1024px) {
+  .toc {
+    position: static;
+    border-right: none;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 24px 0;
+    max-height: none;
+  }
+}
+
+/* ─────────── Article Content ─────────── */
+article {
+  max-width: 720px;
+}
+
+section {
+  margin-bottom: 96px;
+  scroll-margin-top: 32px;
+}
+
+section:last-child { margin-bottom: 0; }
+
+.section-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--oxblood);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-num::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+h2 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 42px;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  margin: 0 0 32px;
+  font-variation-settings: "opsz" 60;
+}
+
+h2 .italic {
+  font-style: italic;
+  font-weight: 400;
+}
+
+h3 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 48px 0 16px;
+  font-variation-settings: "opsz" 36;
+}
+
+h3 code {
+  font-family: var(--mono);
+  font-size: 20px;
+  background: var(--oxblood-soft);
+  color: var(--oxblood);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+p {
+  margin: 0 0 20px;
+  hyphens: auto;
+}
+
+p code, li code, td code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: rgba(122, 24, 24, 0.06);
+  color: var(--oxblood);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+em {
+  font-style: italic;
+}
+
+a {
+  color: var(--oxblood);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(122, 24, 24, 0.35);
+  transition: text-decoration-color 0.15s ease;
+}
+
+a:hover {
+  text-decoration-color: var(--oxblood);
+}
+
+/* drop cap removed for readability */
+
+/* ─────────── Tables ─────────── */
+.table-wrap {
+  margin: 32px 0;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+table thead tr {
+  border-bottom: 1px solid var(--ink);
+}
+
+table th {
+  text-align: left;
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 14px 12px 12px;
+  vertical-align: bottom;
+}
+
+table td {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+  line-height: 1.45;
+}
+
+table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+table tbody tr:hover {
+  background: rgba(28, 22, 18, 0.02);
+}
+
+table td.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+table td.center { text-align: center; }
+
+/* ─────────── Code Blocks ─────────── */
+.codeblock {
+  margin: 28px 0;
+  background: var(--code-bg);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    0 1px 0 rgba(28, 22, 18, 0.04),
+    0 14px 32px -16px rgba(28, 22, 18, 0.4);
+}
+
+.codeblock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(232, 222, 200, 0.5);
+}
+
+.codeblock-header .lang {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.codeblock-header .lang::before {
+  content: '';
+  width: 6px; height: 6px;
+  background: #D69E5C;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.copy-btn {
+  background: none;
+  border: 1px solid rgba(232, 222, 200, 0.15);
+  color: rgba(232, 222, 200, 0.6);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copy-btn:hover {
+  border-color: rgba(232, 222, 200, 0.4);
+  color: var(--code-ink);
+}
+
+.copy-btn.copied {
+  border-color: #A8C99B;
+  color: #A8C99B;
+}
+
+.codeblock pre {
+  margin: 0;
+  padding: 20px 24px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--code-ink);
+}
+
+.codeblock pre code {
+  font-family: inherit;
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Code syntax */
+.tok-comment { color: var(--code-comment); font-style: italic; }
+.tok-keyword { color: #C098D6; }
+.tok-string  { color: var(--code-string); }
+.tok-prop    { color: #D69E5C; }
+.tok-fn      { color: #8FB8E0; }
+.tok-num     { color: #E4906A; }
+.tok-punc    { color: rgba(232, 222, 200, 0.55); }
+
+/* ─────────── Tree (file structure) ─────────── */
+pre.tree {
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  padding: 20px 24px;
+  margin: 28px 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink);
+  border-radius: 3px;
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 4;
+}
+pre.tree code { font-family: inherit; background: none; color: inherit; padding: 0; font-size: inherit; }
+
+/* ─────────── Callout / Notice ─────────── */
+.notice {
+  margin: 32px 0;
+  padding: 24px 28px;
+  background: var(--paper-warm);
+  border-left: 3px solid var(--oxblood);
+  position: relative;
+}
+
+.notice-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--oxblood);
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.notice p:last-child { margin-bottom: 0; }
+
+/* ─────────── Rule Cards ─────────── */
+.rule-card {
+  margin: 40px 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.rule-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding-top: 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.rule-name {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.rule-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--oxblood);
+  border: 1px solid var(--oxblood);
+  padding: 3px 10px;
+  border-radius: 2px;
+}
+
+.rule-badge.active {
+  background: var(--oxblood);
+  color: var(--paper);
+}
+
+.rule-tagline {
+  font-family: var(--body);
+  font-style: italic;
+  color: var(--ink-quiet);
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.rule-meta {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px 24px;
+  font-size: 15px;
+  margin-bottom: 16px;
+}
+
+.rule-meta dt {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 4px;
+}
+
+.rule-meta dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+/* ─────────── Lists ─────────── */
+ul, ol {
+  padding-left: 28px;
+  margin: 16px 0;
+}
+
+li {
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+ul li::marker {
+  color: var(--oxblood);
+  content: '— ';
+}
+
+ol li::marker {
+  font-family: var(--mono);
+  color: var(--oxblood);
+  font-size: 0.85em;
+}
+
+/* ─────────── Numbered protection layers ─────────── */
+.layer {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 24px;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule-soft);
+  align-items: baseline;
+}
+
+.layer:first-of-type { border-top: 1px solid var(--ink); }
+.layer:last-of-type { border-bottom: 1px solid var(--ink); }
+
+.layer-num {
+  font-family: var(--display);
+  font-size: 56px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--oxblood);
+  font-style: italic;
+  font-variation-settings: "opsz" 144;
+}
+
+.layer-title {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0 0 12px;
+}
+
+.layer-body {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-quiet);
+}
+
+.layer-body p { margin-bottom: 12px; }
+.layer-body p:last-child { margin-bottom: 0; }
+
+/* ─────────── Footer / Colophon ─────────── */
+.colophon {
+  margin-top: 120px;
+  padding: 48px 0 80px;
+  border-top: 1px solid var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 32px;
+}
+
+@media (max-width: 768px) {
+  .colophon { grid-template-columns: 1fr; }
+}
+
+.colophon-title {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 12px;
+}
+
+.colophon .ink {
+  color: var(--ink);
+}
+
+@media (max-width: 768px) {
+  .layout { padding: 0 24px; }
+  .cover { padding: 80px 0 48px; }
+  .cover-meta { grid-template-columns: 1fr 1fr; }
+  h2 { font-size: 32px; }
+  .lede { font-size: 19px; }
+  .layer { grid-template-columns: 1fr; gap: 4px; padding: 20px 0; }
+  .layer-num { font-size: 36px; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<div class="layout">
+
+  <!-- ════════════════ COVER ════════════════ -->
+  <header class="cover">
+    <div class="eyebrow">
+      <span class="dot"></span>
+      <span>Specification · Internal Engineering Doc</span>
+    </div>
+    <h1>爬蟲站點專屬<br><span class="italic">Hash 清洗規則</span></h1>
+    <p class="lede">
+      在計算 hash 之前對特定站點套用清洗規則 — 讓內容入庫保持完整、向量化不受影響，
+      只在判斷「同一份內容是否已存在」時忽略 URL 與其他易變元素。
+    </p>
+    <dl class="cover-meta">
+      <div>
+        <dt>Path</dt>
+        <dd>utils/crawler/rules/</dd>
+      </div>
+      <div>
+        <dt>Status</dt>
+        <dd class="status">● Active in production</dd>
+      </div>
+      <div>
+        <dt>Last revised</dt>
+        <dd>2026-05-21</dd>
+      </div>
+      <div>
+        <dt>Companion</dt>
+        <dd><a href="./crawler-false-change-patterns.md">false-change-patterns.md</a></dd>
+      </div>
+    </dl>
+  </header>
+
+  <!-- ════════════════ BODY ════════════════ -->
+  <div class="body-grid">
+
+    <!-- ─────── TOC ─────── -->
+    <nav class="toc" aria-label="Contents">
+      <span class="toc-title">Contents</span>
+      <ol>
+        <li><a href="#problem">問題描述</a></li>
+        <li><a href="#solution">解決方案</a></li>
+        <li><a href="#structure">檔案結構</a></li>
+        <li><a href="#rules">共用規則</a></li>
+        <li><a href="#enable">啟用規則</a></li>
+        <li><a href="#extend">新增規則</a></li>
+        <li><a href="#safety">錯誤處理</a></li>
+        <li><a href="#side-effect">副作用</a></li>
+        <li><a href="#perf">性能影響</a></li>
+        <li><a href="#history">改動歷史</a></li>
+      </ol>
+    </nav>
+
+    <!-- ─────── ARTICLE ─────── -->
+    <article>
+
+      <!-- §1 PROBLEM -->
+      <section id="problem">
+        <div class="section-num">§ 01 · Problem</div>
+        <h2><span class="italic">為什麼</span>需要這套規則？</h2>
+        <p>
+          爬蟲在判斷「同一份內容是否已存在」時，使用 <code>md5(markdown + title + meta_data + hashVersion)</code> 比對。
+          但某些網站的頁面內嵌「列表頁返回連結」、「分頁器」等元素，URL 中含有 <code>page=N</code>
+          等位置相關參數，會隨著該文章在來源列表中的位置漂移而變動。
+        </p>
+        <p>
+          雖然主體內容完全相同，但 markdown 文字差幾個字元，hash 就完全不同，
+          造成系統把舊資料「<strong>刪除 + 新增</strong>」當成異動處理。
+        </p>
+
+        <h3>實測案例：coia 站點</h3>
+        <p>對比第一次與第二次爬到的 coia 全站資料（各約 1,054 個 JSON）：</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 65%;">項目</th>
+                <th style="width: 35%;">數量</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>被視為「新增/刪除」的檔案</td><td class="num">A 獨有 163 + B 獨有 163</td></tr>
+              <tr><td>其中真正內容異動</td><td class="num">僅 6 + 6 ≈ 12 個</td></tr>
+              <tr><td><strong>假異動率</strong></td><td class="num"><strong>約 96%</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>主要原因是 detail 頁底部的「回到列表」連結：</p>
+
+        <div class="codeblock">
+          <div class="codeblock-header">
+            <span class="lang">html</span>
+            <button class="copy-btn" data-copy="link-noise">Copy</button>
+          </div>
+<pre><code id="link-noise"><span class="tok-punc">&lt;</span><span class="tok-keyword">a</span> <span class="tok-prop">href</span><span class="tok-punc">=</span><span class="tok-string">"cms_emphasis.php?...&amp;page=1"</span> <span class="tok-prop">title</span><span class="tok-punc">=</span><span class="tok-string">"回到衛生福利組列表"</span><span class="tok-punc">&gt;</span>返回<span class="tok-punc">&lt;/</span><span class="tok-keyword">a</span><span class="tok-punc">&gt;</span>
+<span class="tok-punc">&lt;</span><span class="tok-keyword">a</span> <span class="tok-prop">href</span><span class="tok-punc">=</span><span class="tok-string">"cms_emphasis.php?...&amp;page=2"</span> <span class="tok-prop">title</span><span class="tok-punc">=</span><span class="tok-string">"回到衛生福利組列表"</span><span class="tok-punc">&gt;</span>返回<span class="tok-punc">&lt;/</span><span class="tok-keyword">a</span><span class="tok-punc">&gt;</span></code></pre>
+        </div>
+
+        <p>1,118 字的 markdown 中只差 1 個字元（<code>page=1</code> vs <code>page=2</code>），但 md5 hash 完全不同。</p>
+      </section>
+
+<!-- §2 SOLUTION -->
+      <section id="solution">
+        <div class="section-num">§ 02 · Solution</div>
+        <h2>Hash 計算與內容入庫<br><span class="italic">分離為兩條路徑</span></h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 22%;">路徑</th>
+                <th style="width: 38%;">函數</th>
+                <th style="width: 40%;">結果用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>入庫用</td>
+                <td><code>filterAndConvertHtml(html, baseUrl)</code></td>
+                <td>寫入 <code>crawler_documents_content.content</code>、向量化、搜尋 — <strong>保留完整 a href</strong></td>
+              </tr>
+              <tr>
+                <td>Hash 用</td>
+                <td><code>filterAndConvertHtmlForHash(html, baseUrl, siteId)</code></td>
+                <td>僅供 md5 計算 — <strong>套用站點專屬清洗規則</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>兩條路徑算出來的 markdown 不同：入庫的保留 URL，hash 的可以洗掉 URL 雜訊。對搜尋、向量、RAG 無任何影響。</p>
+      </section>
+
+      <!-- §3 STRUCTURE -->
+      <section id="structure">
+        <div class="section-num">§ 03 · File structure</div>
+        <h2>檔案結構</h2>
+
+        <pre class="tree">ava-backend-server/
+└── utils/
+    ├── crawler.js                 # filterAndConvertHtml & filterAndConvertHtmlForHash
+    └── crawler/
+        ├── processCrawlerFiles.js # hash 計算入口
+        └── rules/                 # ← 規則系統
+            ├── common-rules.js    # 共用規則庫（規則定義）
+            ├── site-rules.js      # 站點 → 規則 對應表
+            └── index.js           # applySiteHashRules / hasSiteHashRules / getSiteHashRules</pre>
+      </section>
+
+<!-- §4 RULES -->
+      <section id="rules">
+        <div class="section-num">§ 04 · Common rules</div>
+        <h2>目前支援的<span class="italic">共用規則</span></h2>
+        <p>定義在 <code>utils/crawler/rules/common-rules.js</code>。</p>
+
+        <!-- Rule 1 -->
+        <div class="rule-card">
+          <div class="rule-card-head">
+            <span class="rule-name">stripAHrefQueryParams</span>
+            <span class="rule-badge">Available</span>
+          </div>
+          <p class="rule-tagline">從所有 <code>&lt;a&gt;</code> 的 href 移除指定 query 參數。</p>
+
+          <dl class="rule-meta">
+            <dt>Options</dt>
+            <dd><code>{ params: string[] }</code></dd>
+            <dt>適用情境</dt>
+            <dd>只想清掉特定 query 參數，保留其他 URL 結構</dd>
+            <dt>效果</dt>
+            <dd><code>&lt;a href="x.com/?id=5&amp;page=1"&gt;</code> → <code>&lt;a href="x.com/?id=5"&gt;</code></dd>
+          </dl>
+
+          <div class="codeblock">
+            <div class="codeblock-header">
+              <span class="lang">js · 範例設定</span>
+              <button class="copy-btn" data-copy="rule1-ex">Copy</button>
+            </div>
+<pre><code id="rule1-ex"><span class="tok-punc">{</span> <span class="tok-prop">rule</span><span class="tok-punc">:</span> <span class="tok-string">"stripAHrefQueryParams"</span><span class="tok-punc">,</span> <span class="tok-prop">options</span><span class="tok-punc">:</span> <span class="tok-punc">{</span> <span class="tok-prop">params</span><span class="tok-punc">:</span> <span class="tok-punc">[</span><span class="tok-string">"page"</span><span class="tok-punc">,</span> <span class="tok-string">"timestamp"</span><span class="tok-punc">]</span> <span class="tok-punc">}</span> <span class="tok-punc">}</span></code></pre>
+          </div>
+        </div>
+
+        <!-- Rule 2 -->
+        <div class="rule-card">
+          <div class="rule-card-head">
+            <span class="rule-name">stripAllAHref</span>
+            <span class="rule-badge active">In Use · coia</span>
+          </div>
+          <p class="rule-tagline">無差別移除所有 <code>&lt;a&gt;</code> 的 href 屬性。連結文字保留，turndown 後變純文字。</p>
+
+          <dl class="rule-meta">
+            <dt>Options</dt>
+            <dd>無</dd>
+            <dt>適用情境</dt>
+            <dd>該站點的所有內嵌 URL 都可能是雜訊，最直接的方式是讓 hash 無視所有 a href</dd>
+            <dt>效果</dt>
+            <dd><code>&lt;a href="x.com/?id=5"&gt;點我&lt;/a&gt;</code> → turndown 後變 <code>點我</code></dd>
+          </dl>
+
+          <div class="codeblock">
+            <div class="codeblock-header">
+              <span class="lang">js · 範例設定</span>
+              <button class="copy-btn" data-copy="rule2-ex">Copy</button>
+            </div>
+<pre><code id="rule2-ex"><span class="tok-punc">{</span> <span class="tok-prop">rule</span><span class="tok-punc">:</span> <span class="tok-string">"stripAllAHref"</span> <span class="tok-punc">}</span></code></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- §5 ENABLE -->
+      <section id="enable">
+        <div class="section-num">§ 05 · Configuration</div>
+        <h2>怎麼幫一個站點<span class="italic">啟用規則</span></h2>
+        <p>編輯 <code>utils/crawler/rules/site-rules.js</code>，在 <code>SITE_RULES</code> 加一筆：</p>
+
+        <div class="codeblock">
+          <div class="codeblock-header">
+            <span class="lang">js · site-rules.js</span>
+            <button class="copy-btn" data-copy="site-rules-ex">Copy</button>
+          </div>
+<pre><code id="site-rules-ex"><span class="tok-keyword">const</span> <span class="tok-fn">SITE_RULES</span> <span class="tok-punc">=</span> <span class="tok-punc">{</span>
+    <span class="tok-comment">// key 是 crawler.site_id 欄位（不是 UUID）</span>
+    <span class="tok-prop">coia</span><span class="tok-punc">:</span> <span class="tok-punc">[</span>
+        <span class="tok-punc">{</span> <span class="tok-prop">rule</span><span class="tok-punc">:</span> <span class="tok-string">"stripAllAHref"</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+    <span class="tok-punc">]</span><span class="tok-punc">,</span>
+
+    <span class="tok-comment">// 可以同時啟用多條規則</span>
+    <span class="tok-string">"其他-site-id"</span><span class="tok-punc">:</span> <span class="tok-punc">[</span>
+        <span class="tok-punc">{</span> <span class="tok-prop">rule</span><span class="tok-punc">:</span> <span class="tok-string">"stripAHrefQueryParams"</span><span class="tok-punc">,</span> <span class="tok-prop">options</span><span class="tok-punc">:</span> <span class="tok-punc">{</span> <span class="tok-prop">params</span><span class="tok-punc">:</span> <span class="tok-punc">[</span><span class="tok-string">"page"</span><span class="tok-punc">,</span> <span class="tok-string">"timestamp"</span><span class="tok-punc">]</span> <span class="tok-punc">}</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+        <span class="tok-punc">{</span> <span class="tok-prop">rule</span><span class="tok-punc">:</span> <span class="tok-string">"stripAllAHref"</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+    <span class="tok-punc">]</span><span class="tok-punc">,</span>
+<span class="tok-punc">}</span><span class="tok-punc">;</span></code></pre>
+        </div>
+
+        <p>執行下一次同步，log 開頭會看到摘要：</p>
+
+        <div class="codeblock">
+          <div class="codeblock-header">
+            <span class="lang">stdout · log</span>
+            <button class="copy-btn" data-copy="log-ex">Copy</button>
+          </div>
+<pre><code id="log-ex"><span class="tok-punc">[</span><span class="tok-prop">hash-rules</span><span class="tok-punc">]</span> <span class="tok-prop">siteId</span><span class="tok-punc">=</span><span class="tok-string">coia</span>：啟用 <span class="tok-num">1</span> 條規則 → stripAllAHref
+<span class="tok-punc">[</span><span class="tok-prop">hash-rules</span><span class="tok-punc">]</span> <span class="tok-prop">siteId</span><span class="tok-punc">=</span><span class="tok-string">其他</span>: 未啟用站點規則，hash 使用預設清洗邏輯</code></pre>
+        </div>
+      </section>
+
+      <!-- §6 EXTEND -->
+      <section id="extend">
+        <div class="section-num">§ 06 · Extension</div>
+        <h2>怎麼新增<span class="italic">第三條規則</span></h2>
+        <p>在 <code>utils/crawler/rules/common-rules.js</code> 的 <code>COMMON_RULES</code> 加一條：</p>
+
+        <div class="codeblock">
+          <div class="codeblock-header">
+            <span class="lang">js · common-rules.js</span>
+            <button class="copy-btn" data-copy="new-rule-ex">Copy</button>
+          </div>
+<pre><code id="new-rule-ex"><span class="tok-keyword">const</span> <span class="tok-fn">COMMON_RULES</span> <span class="tok-punc">=</span> <span class="tok-punc">{</span>
+    <span class="tok-comment">// ... 既有規則 ...</span>
+
+    <span class="tok-comment">// 範例：移除所有 iframe（包含 google maps 等嵌入）</span>
+    <span class="tok-prop">removeAllIframes</span><span class="tok-punc">:</span> <span class="tok-punc">{</span>
+        <span class="tok-prop">description</span><span class="tok-punc">:</span> <span class="tok-string">"移除所有 iframe"</span><span class="tok-punc">,</span>
+        <span class="tok-prop">apply</span><span class="tok-punc">:</span> <span class="tok-punc">(</span><span class="tok-prop">$</span><span class="tok-punc">)</span> <span class="tok-punc">=&gt;</span> <span class="tok-punc">{</span> <span class="tok-fn">$</span><span class="tok-punc">(</span><span class="tok-string">"iframe"</span><span class="tok-punc">).</span><span class="tok-fn">remove</span><span class="tok-punc">();</span> <span class="tok-punc">}</span><span class="tok-punc">,</span>
+    <span class="tok-punc">}</span><span class="tok-punc">,</span>
+<span class="tok-punc">}</span><span class="tok-punc">;</span></code></pre>
+        </div>
+
+        <p>加完後立刻可在 <code>site-rules.js</code> 用 <code>{ rule: "removeAllIframes" }</code> 啟用，<strong>不用改其他檔案</strong>。</p>
+
+        <h3>規則 apply 函數的簽名</h3>
+
+        <div class="codeblock">
+          <div class="codeblock-header">
+            <span class="lang">ts · signature</span>
+            <button class="copy-btn" data-copy="sig-ex">Copy</button>
+          </div>
+<pre><code id="sig-ex"><span class="tok-prop">apply</span><span class="tok-punc">:</span> <span class="tok-punc">(</span><span class="tok-prop">cheerio$</span><span class="tok-punc">,</span> <span class="tok-prop">options</span><span class="tok-punc">)</span> <span class="tok-punc">=&gt;</span> <span class="tok-keyword">void</span></code></pre>
+        </div>
+
+        <ul>
+          <li><code>cheerio$</code> — cheerio 已載入的 DOM，直接操作</li>
+          <li><code>options</code> — 來自 <code>site-rules.js</code> 的 options（可選）</li>
+          <li>不需要 return；直接修改 <code>cheerio$</code> 即可</li>
+          <li><strong>不要 throw</strong> — 失敗時內部處理；若真的 throw，外層有 try/catch 接住，不會中斷流程</li>
+        </ul>
+      </section>
+
+<!-- §7 SAFETY -->
+      <section id="safety">
+        <div class="section-num">§ 07 · Resilience</div>
+        <h2>安全性與<span class="italic">錯誤處理</span></h2>
+        <p>系統設計為「規則出錯絕不影響整體流程」，分三層保護：</p>
+
+        <div class="layer">
+          <div class="layer-num">i</div>
+          <div>
+            <h4 class="layer-title">單條規則出錯 — 跳過該規則、繼續算 hash</h4>
+            <div class="layer-body">
+              <p><code>applySiteHashRules</code> 對每條規則的 <code>apply()</code> 都包了 try/catch：規則 throw 時 <code>console.error</code> + 跳過，未知規則名稱則 <code>console.warn</code> + 跳過。多條規則中只有一條壞掉，其他規則照常套用。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-num">ii</div>
+          <div>
+            <h4 class="layer-title"><code>filterAndConvertHtmlForHash</code> 整個函數出錯 — fallback 回原邏輯</h4>
+            <div class="layer-body">
+              <p>若 cheerio / turndown 在新路徑整個失敗，會 fallback 使用 <code>filterAndConvertHtml</code>。此情況下：該檔案 hash 不會套用站點規則（等同沒裝這套規則），但 hash 仍會被算出來，檔案處理不中斷。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="layer">
+          <div class="layer-num">iii</div>
+          <div>
+            <h4 class="layer-title"><code>processFile</code> 整個出錯 — 該檔案跳過、不影響其他檔案</h4>
+            <div class="layer-body">
+              <p>這是 existing behavior，不是新引入的。<code>processCrawlerFiles.js</code> 的 queue worker 對每個 <code>processFile</code> 都有 try/catch，單一檔案出問題會被 log 記錄並跳過，不影響整個同步流程。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- §8 SIDE EFFECT -->
+      <section id="side-effect">
+        <div class="section-num">§ 08 · Side effect</div>
+        <h2>首次啟用<span class="italic">會有一次性陣痛</span></h2>
+
+        <div class="notice">
+          <span class="notice-label">⚠ Warning</span>
+          <p>任何時候對某站點<strong>啟用 / 修改 / 移除</strong>規則，該站點下一次同步時，<strong>所有檔案會被視為「舊全刪 + 新全增」一次</strong>。</p>
+          <p>原因：規則改變後，同一份 html 算出的 markdown 變了，hash 自然不同 → 對不上 DB 既有 hash → 系統判定為「舊資料消失 + 新資料新增」。之後就會回到正常水位。</p>
+        </div>
+
+        <p><strong>建議</strong>：規則設定盡量一次到位、別頻繁變動，每次變動都會付一次「全站重洗」的代價。</p>
+      </section>
+
+      <!-- §9 PERF -->
+      <section id="perf">
+        <div class="section-num">§ 09 · Performance</div>
+        <h2>性能影響</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40%;">站點配置</th>
+                <th style="width: 60%;">額外開銷</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>沒設規則</td>
+                <td><strong>零</strong> — <code>hasSiteHashRules(siteId)</code> 回 false 後直接走原本路徑</td>
+              </tr>
+              <tr>
+                <td>有設規則</td>
+                <td>每筆檔案多跑一次 cheerio.load + turndown</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>對「有設規則的站點」會增加 ~50% 的 HTML 處理時間。在 coia 等小站（&lt; 5,000 筆）感受不到，在大站建議實測再評估。</p>
+      </section>
+
+      <!-- §10 HISTORY -->
+      <section id="history">
+        <div class="section-num">§ 10 · Changelog</div>
+        <h2>改動歷史</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 18%;">日期</th>
+                <th style="width: 82%;">內容</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>2026-05-19</code></td>
+                <td>初版 — 新增 <code>stripAHrefQueryParams</code>、<code>stripAllAHref</code> 兩條規則，coia 站啟用 <code>stripAllAHref</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ───── COLOPHON ───── -->
+      <footer class="colophon">
+        <div>
+          <div class="colophon-title">Companion</div>
+          <a href="./crawler-false-change-patterns.md" class="ink">crawler-false-change-patterns.md</a>
+        </div>
+        <div>
+          <div class="colophon-title">Set in</div>
+          <div class="ink">Fraunces · Newsreader · JetBrains Mono</div>
+        </div>
+        <div>
+          <div class="colophon-title">End of document</div>
+          <div class="ink">— · —</div>
+        </div>
+      </footer>
+
+    </article>
+
+  </div>
+</div>
+
+<script>
+// ─────── Reading progress bar ───────
+const progress = document.getElementById('progress');
+window.addEventListener('scroll', () => {
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  progress.style.width = (window.scrollY / max * 100) + '%';
+}, { passive: true });
+
+// ─────── Copy buttons ───────
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const target = document.getElementById(btn.dataset.copy);
+    if (!target) return;
+    try {
+      await navigator.clipboard.writeText(target.innerText);
+      const orig = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = orig;
+        btn.classList.remove('copied');
+      }, 1400);
+    } catch (e) {
+      console.warn('Copy failed', e);
+    }
+  });
+});
+
+// ─────── TOC scroll spy ───────
+const tocLinks = document.querySelectorAll('.toc a');
+const sections = Array.from(tocLinks).map(a => {
+  const id = a.getAttribute('href').slice(1);
+  return { id, link: a, el: document.getElementById(id) };
+}).filter(s => s.el);
+
+function updateActiveTOC() {
+  const offset = 100;
+  let active = sections[0];
+  for (const s of sections) {
+    if (s.el.getBoundingClientRect().top - offset <= 0) active = s;
+  }
+  tocLinks.forEach(a => a.classList.remove('active'));
+  if (active) active.link.classList.add('active');
+}
+
+window.addEventListener('scroll', updateActiveTOC, { passive: true });
+updateActiveTOC();
+</script>
+
+</body>
+</html>

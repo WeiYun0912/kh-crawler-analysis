@@ -1,0 +1,2987 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>爬蟲文件分析器 · Document Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Turndown: HTML → Markdown，用來精確還原 production hash 計算流程 -->
+<script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
+<!-- md5: 跟 production node 'md5' 套件相同演算法，方便驗證實際 hash 值 -->
+<script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.19.0/js/md5.min.js"></script>
+<style>
+:root {
+  --paper: #F4EFE4;
+  --paper-warm: #EFE8D9;
+  --paper-deep: #E8DFCB;
+  --ink: #1B1612;
+  --ink-quiet: #4A413A;
+  --ink-faint: #8B7E70;
+  --rule: #C9BFAE;
+  --rule-soft: #E0D6C2;
+  --oxblood: #7A1818;
+  --oxblood-soft: rgba(122, 24, 24, 0.08);
+  --solved: #2C5F2D;
+  --solved-bg: rgba(44, 95, 45, 0.08);
+  --open: #B45309;
+  --open-bg: rgba(180, 83, 9, 0.10);
+  --observing: #6B6258;
+  --observing-bg: rgba(107, 98, 88, 0.10);
+  --historical: #45617A;
+  --historical-bg: rgba(69, 97, 122, 0.08);
+  --code-bg: #1F1B17;
+  --code-ink: #E8DEC8;
+  --display: 'Fraunces', 'Noto Serif TC', serif;
+  --body: 'Newsreader', 'Noto Serif TC', serif;
+  --ui: 'Noto Sans TC', 'Inter', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ─── Top Nav ─── */
+.top-nav {
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.top-nav .brand { color: var(--oxblood); font-weight: 600; }
+.top-nav .brand::before {
+  content: '◾';
+  margin-right: 8px;
+  color: var(--oxblood);
+}
+.top-nav nav { display: flex; gap: 28px; }
+.top-nav a {
+  color: var(--ink-faint);
+  text-decoration: none;
+  position: relative;
+  padding: 4px 0;
+  transition: color 0.15s;
+}
+.top-nav a:hover { color: var(--ink); }
+.top-nav a.current {
+  color: var(--oxblood);
+}
+.top-nav a.current::after {
+  content: '';
+  position: absolute;
+  bottom: -16px; left: 0; right: 0;
+  height: 2px;
+  background: var(--oxblood);
+}
+
+@media (max-width: 768px) {
+  .top-nav { padding: 12px 20px; flex-direction: column; gap: 12px; }
+  .top-nav nav { gap: 16px; }
+}
+
+.layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 64px 48px 96px;
+}
+
+@media (max-width: 768px) {
+  .layout { padding: 32px 20px 64px; }
+}
+
+/* ─── Cover ─── */
+.cover { margin-bottom: 48px; }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--oxblood);
+  margin-bottom: 20px;
+}
+.cover h1 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: clamp(38px, 5.5vw, 60px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 0 0 20px;
+  font-variation-settings: "opsz" 144;
+}
+.lede {
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink-quiet);
+  max-width: 720px;
+  margin: 0;
+}
+
+/* ─── Mode switch ─── */
+.mode-switch {
+  display: inline-flex;
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 4px;
+  margin: 0 0 32px;
+  gap: 2px;
+}
+.mode-btn {
+  background: none;
+  border: none;
+  font-family: var(--ui);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-quiet);
+  padding: 8px 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mode-btn:hover { color: var(--ink); }
+.mode-btn.active {
+  background: var(--paper);
+  color: var(--oxblood);
+  box-shadow: 0 1px 2px rgba(28, 22, 18, 0.06);
+}
+
+/* ─── Dropzone ─── */
+.dropzone {
+  display: block;
+  border: 2px dashed var(--rule);
+  background: var(--paper-warm);
+  padding: 56px 32px;
+  text-align: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 40px 0;
+}
+.dropzone:hover, .dropzone.dragging {
+  border-color: var(--oxblood);
+  background: var(--paper-deep);
+}
+.dropzone .icon {
+  font-family: var(--display);
+  font-size: 56px;
+  font-style: italic;
+  color: var(--oxblood);
+  line-height: 1;
+  margin-bottom: 12px;
+  font-variation-settings: "opsz" 144;
+}
+.dropzone .primary {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.dropzone .secondary {
+  font-family: var(--ui);
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+#fileInput { display: none; }
+
+/* ─── Sample buttons ─── */
+.samples {
+  text-align: center;
+  margin: -16px 0 32px;
+  font-family: var(--ui);
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+.samples .label { margin-right: 12px; }
+.samples button {
+  background: none;
+  border: 1px solid var(--rule);
+  color: var(--ink-quiet);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 5px 12px;
+  margin: 0 4px 4px 0;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.samples button:hover { border-color: var(--oxblood); color: var(--oxblood); }
+
+/* ─── Results ─── */
+.results { display: none; }
+.results.visible { display: block; }
+
+.results h2 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 56px 0 20px;
+  font-variation-settings: "opsz" 48;
+}
+
+.results h2:first-child { margin-top: 32px; }
+
+.section-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--oxblood);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.section-num::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+/* ─── Meta panel ─── */
+.meta-panel {
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.meta-panel dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px 24px;
+}
+.meta-panel dt {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 3px;
+}
+.meta-panel dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+/* ─── Pattern cards ─── */
+.patterns-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.no-patterns {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 40px 24px;
+  text-align: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 20px;
+  color: var(--solved);
+  background: var(--solved-bg);
+}
+
+.p-card {
+  border-top: 1px solid var(--ink);
+  padding: 24px 0;
+}
+.p-card:last-child { border-bottom: 1px solid var(--ink); }
+
+.p-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.p-num {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 36px;
+  line-height: 1;
+  color: var(--oxblood);
+  font-variation-settings: "opsz" 96;
+}
+.p-name {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin: 0;
+  flex: 1;
+  min-width: 240px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.badge::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+.badge.solved { color: var(--solved); background: var(--solved-bg); }
+.badge.solved::before { background: var(--solved); }
+.badge.open { color: var(--open); background: var(--open-bg); }
+.badge.open::before { background: var(--open); }
+.badge.observing { color: var(--observing); background: var(--observing-bg); }
+.badge.observing::before { background: var(--observing); }
+.badge.historical { color: var(--historical); background: var(--historical-bg); }
+.badge.historical::before { background: var(--historical); }
+
+.p-fields {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 12px 24px;
+  margin: 0;
+}
+.p-fields dt {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 4px;
+}
+.p-fields dd {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .p-fields { grid-template-columns: 1fr; gap: 4px; }
+  .p-fields dt { padding-top: 12px; }
+}
+
+/* ─── Before/After snippet ─── */
+.snippet-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+@media (max-width: 768px) {
+  .snippet-diff { grid-template-columns: 1fr; }
+}
+.snip {
+  background: var(--code-bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.snip-head {
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(232, 222, 200, 0.5);
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.snip-before .snip-head { color: #E48F8F; }
+.snip-after  .snip-head { color: #A8C99B; }
+.snip pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--code-ink);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Highlighted diff inside code */
+.hl-rem { background: rgba(228, 143, 143, 0.16); color: #E48F8F; text-decoration: line-through; }
+.hl-add { background: rgba(168, 201, 155, 0.16); color: #A8C99B; }
+
+code.inline {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--oxblood-soft);
+  color: var(--oxblood);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+/* ─── Stats bar ─── */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 20px;
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 18px 24px;
+  margin: 20px 0;
+}
+.stat-item {
+  font-family: var(--mono);
+}
+.stat-item .num {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--oxblood);
+  font-variation-settings: "opsz" 96;
+  display: block;
+  margin-bottom: 4px;
+}
+.stat-item .lbl {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* ─── HTML Preview (iframes) ─── */
+.preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 20px 0;
+}
+@media (max-width: 1024px) {
+  .preview-grid { grid-template-columns: 1fr; }
+}
+
+.preview-pane {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  overflow: hidden;
+  background: white;
+  display: flex;
+  flex-direction: column;
+}
+.preview-head {
+  padding: 8px 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: var(--paper-warm);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-quiet);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.preview-head::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.preview-head.before-head::before { background: #B45309; }
+.preview-head.after-head::before { background: #2C5F2D; }
+.preview-head.after-head { color: var(--solved); }
+.preview-head.before-head { color: var(--open); }
+
+.preview-frame {
+  width: 100%;
+  height: 600px;
+  border: none;
+  background: white;
+  resize: vertical;
+  min-height: 300px;
+  max-height: 90vh;
+}
+
+.md-pane {
+  margin: 0;
+  padding: 8px 0;
+  height: 500px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  background: #fff;
+  color: var(--ink);
+  resize: vertical;
+}
+
+.diff-line {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 1px 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-left: 3px solid transparent;
+}
+.diff-rem { background: rgba(180, 50, 50, 0.10); border-left-color: var(--open); }
+.diff-add { background: rgba(44, 95, 45, 0.09); border-left-color: var(--solved); }
+.diff-empty { background: rgba(28, 22, 18, 0.025); min-height: 1.55em; }
+
+.hash-display {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--paper-warm);
+  padding: 6px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--rule);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.hash-display .label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.hash-display .value {
+  color: var(--oxblood);
+  font-weight: 500;
+  word-break: break-all;
+}
+.hash-display button {
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.hash-display button:hover { color: var(--oxblood); }
+.hash-display button.copied { color: var(--solved); }
+@media (max-width: 768px) {
+  .preview-frame { height: 400px; }
+}
+
+/* ─── Source view (collapsed by default) ─── */
+.source-view { margin-top: 16px; }
+.source-view summary {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  cursor: pointer;
+  padding: 10px 14px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.15s;
+}
+.source-view summary::before {
+  content: '▸';
+  color: var(--ink-faint);
+  transition: transform 0.15s;
+}
+.source-view[open] summary::before { transform: rotate(90deg); }
+.source-view summary:hover { color: var(--oxblood); }
+.source-view .source-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+@media (max-width: 1024px) {
+  .source-view .source-grid { grid-template-columns: 1fr; }
+}
+.source-view pre {
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  padding: 14px;
+  max-height: 400px;
+  overflow: auto;
+  margin: 0;
+  border-radius: 3px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Error */
+.error {
+  background: rgba(180, 83, 9, 0.06);
+  border: 1px solid var(--open);
+  color: var(--open);
+  padding: 16px 20px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 13px;
+  margin: 16px 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+/* ─── Batch mode ─── */
+.batch-progress {
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 18px 24px;
+  margin: 20px 0;
+}
+.batch-progress .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+}
+.batch-progress .bar {
+  height: 4px;
+  background: var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.batch-progress .bar > span {
+  display: block;
+  height: 100%;
+  background: var(--oxblood);
+  transition: width 0.2s ease-out;
+}
+.batch-progress .num {
+  font-family: var(--mono);
+  font-size: 13px;
+  margin-top: 6px;
+  color: var(--ink-quiet);
+}
+
+/* batch summary cards (per pattern type) */
+.batch-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.bs-card {
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule);
+  border-radius: 3px;
+  padding: 14px 18px;
+}
+.bs-card.has-hits { border-left-color: var(--oxblood); }
+.bs-card.clean { border-left-color: var(--solved); }
+.bs-card .type {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.bs-card .name {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 15px;
+  margin: 6px 0 8px;
+  line-height: 1.3;
+}
+.bs-card .count {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 26px;
+  color: var(--oxblood);
+  line-height: 1;
+  font-variation-settings: "opsz" 96;
+}
+.bs-card.clean .count { color: var(--solved); }
+.bs-card .of-total {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-left: 6px;
+}
+
+/* batch file list */
+.batch-list {
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  margin: 20px 0;
+  max-height: 600px;
+  overflow-y: auto;
+}
+.batch-list-head {
+  display: grid;
+  grid-template-columns: 60px 1fr 240px;
+  gap: 16px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--ink);
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  z-index: 1;
+}
+.batch-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 240px;
+  gap: 16px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.batch-row:hover { background: rgba(28, 22, 18, 0.04); }
+.batch-row.clean { color: var(--ink-faint); }
+.batch-row .types {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.batch-row .filename {
+  font-family: var(--mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+.batch-row .pattern-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pattern-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: var(--oxblood-soft);
+  color: var(--oxblood);
+}
+.batch-filter {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.batch-filter input {
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+  flex: 1;
+  min-width: 200px;
+}
+.batch-filter input:focus { outline: none; border-color: var(--oxblood); }
+.batch-filter .filter-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-quiet);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.batch-filter .filter-chip.active {
+  border-color: var(--oxblood);
+  background: var(--oxblood-soft);
+  color: var(--oxblood);
+}
+.batch-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+/* Rule suggestion cards */
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 16px 0 32px;
+}
+.suggestion-card {
+  border-top: 1px solid var(--rule);
+  padding: 20px 0;
+}
+.suggestion-card:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+.suggestion-head {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+.suggestion-num {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 36px;
+  line-height: 1;
+  color: var(--oxblood);
+  font-variation-settings: "opsz" 96;
+}
+.suggestion-meta {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+}
+.suggestion-count {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+.suggestion-count strong {
+  font-size: 20px;
+  color: var(--oxblood);
+}
+.suggestion-occ {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.suggestion-pattern {
+  font-family: var(--mono);
+  font-size: 14px;
+  background: var(--paper-warm);
+  border-left: 3px solid var(--oxblood);
+  padding: 10px 14px;
+  margin: 0 0 12px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.suggestion-examples-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 6px;
+}
+.suggestion-examples {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  padding: 10px 14px;
+  border-radius: 3px;
+  line-height: 1.7;
+}
+.suggestion-example {
+  word-break: break-all;
+}
+
+/* Batch drill-down drawer */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 22, 18, 0.4);
+  z-index: 200;
+  display: none;
+}
+.drawer-backdrop.open { display: block; }
+.drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(90vw, 900px);
+  background: var(--paper);
+  z-index: 201;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  overflow-y: auto;
+  box-shadow: -8px 0 32px -8px rgba(28, 22, 18, 0.2);
+}
+.drawer.open { transform: translateX(0); }
+.drawer-header {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 2;
+}
+.drawer-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  word-break: break-all;
+}
+.drawer-close {
+  background: none;
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 2px;
+  color: var(--ink-quiet);
+}
+.drawer-close:hover { border-color: var(--oxblood); color: var(--oxblood); }
+.drawer-body { padding: 24px; }
+
+/* ─── Compare mode ─── */
+.compare-zones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0 16px;
+}
+@media (max-width: 768px) {
+  .compare-zones { grid-template-columns: 1fr; }
+}
+.compare-dropzone {
+  margin: 0;
+  padding: 36px 24px;
+  position: relative;
+}
+.compare-dropzone .z-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--oxblood);
+  margin-bottom: 16px;
+}
+.compare-dropzone .z-icon {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 64px;
+  line-height: 1;
+  color: var(--oxblood);
+  margin-bottom: 12px;
+  font-variation-settings: "opsz" 144;
+  opacity: 0.5;
+}
+.compare-dropzone.ready .z-icon { opacity: 1; color: var(--solved); }
+.compare-dropzone.ready {
+  border-style: solid;
+  border-color: var(--solved);
+  background: var(--solved-bg);
+}
+.compare-dropzone .z-status {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-quiet);
+  line-height: 1.4;
+}
+.compare-dropzone.ready .z-status { color: var(--solved); font-weight: 500; }
+
+.compare-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 16px 0 32px;
+  flex-wrap: wrap;
+}
+.compare-actions button {
+  font-family: var(--ui);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 22px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--oxblood);
+  background: var(--oxblood);
+  color: var(--paper);
+}
+.compare-actions button:hover { background: #5C1212; border-color: #5C1212; }
+.compare-actions button:disabled {
+  background: var(--rule);
+  border-color: var(--rule);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+.compare-actions button.secondary {
+  background: var(--paper);
+  color: var(--ink-quiet);
+  border-color: var(--rule);
+}
+.compare-actions button.secondary:hover {
+  border-color: var(--oxblood);
+  color: var(--oxblood);
+  background: var(--paper);
+}
+.compare-actions .hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+/* Export bar */
+.export-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+.export-bar .export-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-right: 6px;
+}
+.export-bar button {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  padding: 6px 14px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-quiet);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.export-bar button:hover {
+  border-color: var(--oxblood);
+  color: var(--oxblood);
+}
+
+/* Compare results sections */
+.compare-section {
+  margin: 32px 0;
+}
+.compare-pair {
+  border-top: 1px solid var(--rule-soft);
+  padding: 18px 0;
+}
+.compare-pair:first-of-type { border-top: 1px solid var(--ink); }
+.compare-pair:last-of-type { border-bottom: 1px solid var(--ink); }
+.compare-pair-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  cursor: pointer;
+}
+.compare-pair-url {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  word-break: break-all;
+  flex: 1;
+}
+.compare-pair-types {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.compare-pair-details {
+  margin-top: 16px;
+  background: var(--paper-warm);
+  border-radius: 3px;
+  padding: 16px;
+  display: none;
+}
+.compare-pair.expanded .compare-pair-details { display: block; }
+.compare-pair-toggle {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.compare-pair.expanded .compare-pair-toggle::before { content: '−'; }
+.compare-pair:not(.expanded) .compare-pair-toggle::before { content: '+'; }
+
+/* footer */
+.colophon {
+  margin-top: 80px;
+  padding-top: 32px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+p code, li code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--oxblood-soft);
+  color: var(--oxblood);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+</style>
+</head>
+<body>
+
+<div class="top-nav">
+  <div class="brand">Crawler Hash Tools</div>
+  <nav>
+    <a href="./crawler-false-change-patterns.html">Patterns Catalog</a>
+    <a href="./crawler-document-analyzer.html" class="current">Document Analyzer</a>
+  </nav>
+</div>
+
+<div class="layout">
+
+  <header class="cover">
+    <div class="eyebrow">Tool · Document Analyzer</div>
+    <h1>文件分析器</h1>
+    <p class="lede">
+      偵測爬蟲 JSON 檔可能會中的 pattern、顯示套規則後 HTML 的變化。
+      支援單檔／多檔／整資料夾上傳，或對比「兩次爬取」找出新增刪除的真假。
+    </p>
+  </header>
+
+  <!-- Mode switcher -->
+  <div class="mode-switch" role="tablist">
+    <button class="mode-btn active" data-mode="single" role="tab">單檔 / 批次分析</button>
+    <button class="mode-btn" data-mode="compare" role="tab">兩個資料夾對比</button>
+  </div>
+
+  <!-- ========== SINGLE / BATCH MODE ========== -->
+  <div id="singleMode">
+    <div class="dropzone" id="dropzone" role="button" tabindex="0">
+      <div class="icon">↓</div>
+      <div class="primary">把 JSON 拖到這裡，或點擊選擇</div>
+      <div class="secondary">支援單一檔案、多檔案、或整個資料夾（最多數千個 .json）</div>
+    </div>
+    <input type="file" id="fileInput" accept=".json,application/json" multiple>
+    <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none">
+
+    <div class="samples" id="samples">
+      <span class="label">沒檔案？試試範例：</span>
+      <button data-sample="bulletin">人事公告列表（多重 pattern）</button>
+      <button data-sample="emphasis">回列表連結 (id=570)</button>
+      <button data-sample="subsidy">URL page 參數 (id=2174)</button>
+      <button id="pickFolderBtn" style="margin-left: 16px;">選擇資料夾…</button>
+    </div>
+  </div>
+
+  <!-- ========== COMPARE MODE ========== -->
+  <div id="compareMode" style="display: none;">
+    <p class="lede" style="margin-bottom: 12px;">
+      把上次和這次的爬蟲輸出資料夾各拖到一邊，自動找出 hash 不同的對、只在某一邊的檔案、以及真假異動分類。
+    </p>
+
+    <div class="compare-zones">
+      <div class="dropzone compare-dropzone" id="dropzoneA" role="button" tabindex="0">
+        <div class="z-label">Folder A · 上次同步</div>
+        <div class="z-icon">A</div>
+        <div class="z-status" id="zStatusA">尚未選擇 — 拖資料夾或點擊</div>
+      </div>
+      <div class="dropzone compare-dropzone" id="dropzoneB" role="button" tabindex="0">
+        <div class="z-label">Folder B · 這次同步</div>
+        <div class="z-icon">B</div>
+        <div class="z-status" id="zStatusB">尚未選擇 — 拖資料夾或點擊</div>
+      </div>
+    </div>
+    <input type="file" id="folderInputA" webkitdirectory directory multiple style="display:none">
+    <input type="file" id="folderInputB" webkitdirectory directory multiple style="display:none">
+
+    <div class="compare-actions">
+      <button id="runCompareBtn" disabled>開始對比</button>
+      <button id="resetCompareBtn" class="secondary">重置</button>
+      <span class="hint" id="compareHint">兩邊資料夾都選好後，按下「開始對比」</span>
+    </div>
+
+    <div id="compareResults" style="display: none;"></div>
+  </div>
+
+  <div id="error"></div>
+
+  <!-- Batch mode UI -->
+  <div id="batchResults" style="display: none;">
+    <div class="section-num">§ 01 · Batch summary</div>
+    <h2 id="batchTitle">批次分析結果</h2>
+    <div class="batch-summary" id="batchCards"></div>
+
+    <div class="section-num">§ 02 · Per-file findings</div>
+    <h2>每個檔案的偵測結果</h2>
+    <div class="batch-filter">
+      <input type="text" id="batchSearch" placeholder="搜尋檔名 / URL…">
+      <button class="filter-chip active" data-filter="all">All</button>
+      <button class="filter-chip" data-filter="has-pattern">有 pattern</button>
+      <button class="filter-chip" data-filter="clean">乾淨</button>
+    </div>
+    <div class="batch-list" id="batchList"></div>
+  </div>
+
+  <div class="results" id="results">
+
+    <!-- META -->
+    <div class="section-num">§ 01 · File summary</div>
+    <h2>檔案資訊</h2>
+    <div class="meta-panel">
+      <dl id="metaList"></dl>
+    </div>
+
+    <!-- PATTERNS -->
+    <div class="section-num">§ 02 · Detected patterns</div>
+    <h2 id="patternsTitle">偵測到的 pattern</h2>
+    <div class="patterns-grid" id="patterns"></div>
+
+    <!-- STATS -->
+    <div class="section-num">§ 03 · Effect summary</div>
+    <h2>套規則後的變化</h2>
+    <div class="stats" id="stats"></div>
+
+    <!-- HTML PREVIEW (rendered) -->
+    <div class="section-num">§ 04 · Rendered preview</div>
+    <h2>渲染後的 HTML（原始 vs 套規則後）</h2>
+    <p style="color: var(--ink-quiet); font-size: 15px; margin: 0 0 12px;">
+      左邊是爬蟲原始抓到的 HTML（保留 a href / 點閱數）；右邊是用於 hash 計算的版本（套用 <code>stripAllAHref</code> + <code>clearTableColumnsByHeader</code> 後）。視覺上可以快速比對差異。
+    </p>
+    <div class="preview-grid">
+      <div class="preview-pane">
+        <div class="preview-head before-head">Original</div>
+        <iframe id="previewBefore" class="preview-frame" sandbox></iframe>
+      </div>
+      <div class="preview-pane">
+        <div class="preview-head after-head">After all rules</div>
+        <iframe id="previewAfter" class="preview-frame" sandbox></iframe>
+      </div>
+    </div>
+
+    <!-- MARKDOWN PREVIEW (what production hashes on) -->
+    <div class="section-num">§ 05 · Markdown 對比（hash 真正比的東西）</div>
+    <h2>清洗前 vs 清洗後的 Markdown</h2>
+    <p style="color: var(--ink-quiet); font-size: 15px; margin: 0 0 12px;">
+      Production 是用 <strong>markdown</strong> 算 hash，不是 HTML。左邊 = <code>filterAndConvertHtml</code> 結果（入庫用、含 a href）；右邊 = <code>filterAndConvertHtmlForHash</code> 結果（用於 hash、套站點規則）。兩邊都有經過 turndown 轉換。
+    </p>
+    <div class="preview-grid">
+      <div class="preview-pane">
+        <div class="preview-head before-head">清洗前 (入庫 markdown)</div>
+        <div id="mdBefore" class="md-pane"></div>
+      </div>
+      <div class="preview-pane">
+        <div class="preview-head after-head">清洗後 (hash markdown)</div>
+        <div id="mdAfter" class="md-pane"></div>
+      </div>
+    </div>
+    <div id="mdSummary" class="note" style="margin-top: 12px;"></div>
+
+    <!-- SOURCE (collapsed) -->
+    <details class="source-view">
+      <summary>顯示 HTML 源碼對比</summary>
+      <div class="source-grid">
+        <pre id="htmlBefore"></pre>
+        <pre id="htmlAfter"></pre>
+      </div>
+    </details>
+  </div>
+
+  <footer class="colophon">
+    <div>Tool runs entirely client-side — no data leaves your browser</div>
+    <div>Document Analyzer · 2026-05-27</div>
+  </footer>
+
+</div>
+
+<!-- Batch drill-down drawer (single-file detail in side panel) -->
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<aside class="drawer" id="batchDrawer">
+  <div class="drawer-header">
+    <div class="drawer-title" id="drawerTitle">—</div>
+    <button class="drawer-close" id="drawerClose">關閉</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+// Pattern definitions (must align with crawler-false-change-patterns.md)
+// ════════════════════════════════════════════════════════════════════
+const PATTERN_DEFS = {
+  1: { name: 'URL page 參數有/無', status: 'solved', rule: 'stripAllAHref' },
+  2: { name: '內嵌「回列表」連結的 page=N 漂移', status: 'solved', rule: 'stripAllAHref' },
+  3: { name: 'URL 重複 query 參數（爬蟲 bug）', status: 'solved', rule: 'stripAllAHref' },
+  4: { name: 'URL 額外參數漂移（appId2 等）', status: 'solved', rule: 'stripAllAHref' },
+  5: { name: '詳細頁的「瀏覽次數」漂移', status: 'solved', rule: 'clearTableColumnsByHeader' },
+  6: { name: '列表頁多筆「瀏覽次數」漂移', status: 'solved', rule: 'clearTableColumnsByHeader' },
+  7: { name: '日期 / 時間戳漂移', status: 'observing', rule: '—' },
+  8: { name: '動態 DOM id 漂移', status: 'historical', rule: 'hash v2.3 已修' },
+  9: { name: 'Footer「您是第 N 位瀏覽者」', status: 'solved', rule: 'filterAndConvertHtml inline regex' },
+  10: { name: 'Footer「更新日期 YYYY-MM-DD」', status: 'solved', rule: 'filterAndConvertHtml inline regex' },
+};
+
+const NOISE_KEYWORDS = ['瀏覽', '點閱', '下載', '次數', '觀看', '查看', '閱讀'];
+
+// ════════════════════════════════════════════════════════════════════
+// Detection
+// ════════════════════════════════════════════════════════════════════
+function analyze(jsonData) {
+  const url = jsonData.url || '';
+  const html = jsonData.html || '';
+  const results = [];
+
+  // Type 1: URL has page= param
+  let urlObj = null;
+  try { urlObj = new URL(url); } catch (e) {}
+  if (urlObj && urlObj.searchParams.has('page')) {
+    results.push({
+      type: 1,
+      evidence: `URL 包含 page=${urlObj.searchParams.get('page')}`,
+      before: url,
+      after: (() => { const u = new URL(url); u.searchParams.delete('page'); return u.toString(); })(),
+    });
+  }
+
+  // Type 3: Duplicate query keys (from raw URL string)
+  if (url) {
+    const queryStr = url.split('?')[1] || '';
+    if (queryStr) {
+      const pairs = queryStr.split('&').map(p => p.split('=')[0]);
+      const counts = {};
+      for (const k of pairs) counts[k] = (counts[k] || 0) + 1;
+      const dups = Object.entries(counts).filter(([k, n]) => n > 1).map(([k]) => k);
+      if (dups.length > 0) {
+        results.push({
+          type: 3,
+          evidence: `URL 有重複 key: ${dups.join(', ')}`,
+          before: url,
+          after: '(經規則處理後不影響 hash)',
+        });
+      }
+    }
+  }
+
+  // Type 4: appId2 / known extra params
+  if (urlObj && urlObj.searchParams.has('appId2')) {
+    results.push({
+      type: 4,
+      evidence: `URL 包含 appId2=${urlObj.searchParams.get('appId2')}`,
+      before: url,
+      after: '(經規則處理後不影響 hash)',
+    });
+  }
+
+  // Parse HTML
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+
+  // Type 2: 「回列表」連結
+  const backLinks = [];
+  doc.querySelectorAll('a[title]').forEach(a => {
+    const t = a.getAttribute('title') || '';
+    if (/回到.*列表|回上頁|返回.*列表|回.*目錄/.test(t)) {
+      backLinks.push({ title: t, href: a.getAttribute('href') });
+    }
+  });
+  if (backLinks.length > 0) {
+    const sample = backLinks[0];
+    results.push({
+      type: 2,
+      evidence: `找到 ${backLinks.length} 個「回列表」連結，例如：title="${sample.title}"`,
+      before: `<a href="${escapeHtml(sample.href || '')}" title="${escapeHtml(sample.title)}">...</a>`,
+      after: `<a title="${escapeHtml(sample.title)}">...</a>   <span style="color:#A8C99B">(href 已被 stripAllAHref 清掉)</span>`,
+    });
+  }
+
+  // Type 5/6: <th>瀏覽</th> + <td>數字</td>
+  const tables = doc.querySelectorAll('table');
+  tables.forEach((table, ti) => {
+    const headers = [...table.querySelectorAll('thead th')];
+    if (headers.length === 0) return;
+    const colIdx = headers.findIndex(th => {
+      const t = (th.textContent || '').trim();
+      return NOISE_KEYWORDS.some(k => t.includes(k));
+    });
+    if (colIdx === -1) return;
+    const matchedHeader = headers[colIdx].textContent.trim();
+    const rows = table.querySelectorAll('tbody tr');
+
+    // Verify the corresponding column has numeric content
+    let numericRows = 0;
+    rows.forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      if (tds[colIdx] && /^\s*\d+\s*$/.test(tds[colIdx].textContent || '')) numericRows++;
+    });
+    if (numericRows === 0) return;
+
+    const isDetail = rows.length <= 1;
+    const sampleTr = rows[0];
+    const sampleTds = sampleTr ? [...sampleTr.querySelectorAll('td')] : [];
+    const sampleNum = sampleTds[colIdx] ? sampleTds[colIdx].textContent.trim() : '?';
+
+    const beforeRow = sampleTds.map((td, i) =>
+      i === colIdx ? `<td><span class="hl-rem">${escapeHtml(td.textContent.trim())}</span></td>` : `<td>${escapeHtml(truncate(td.textContent.trim(), 30))}</td>`
+    ).join('');
+    const afterRow = sampleTds.map((td, i) =>
+      i === colIdx ? `<td><span class="hl-add">(cleared)</span></td>` : `<td>${escapeHtml(truncate(td.textContent.trim(), 30))}</td>`
+    ).join('');
+
+    results.push({
+      type: isDetail ? 5 : 6,
+      evidence: `<th>${escapeHtml(matchedHeader)}</th> 在第 ${colIdx + 1} 欄，tbody 有 ${rows.length} 列（${numericRows} 列為純數字）`,
+      before: `<thead>...<th>${escapeHtml(matchedHeader)}</th>...</thead>\n<tbody>\n  <tr>${beforeRow}</tr>\n  ${rows.length > 1 ? `... +${rows.length - 1} 列` : ''}\n</tbody>`,
+      after:  `<thead>...<th>${escapeHtml(matchedHeader)}</th>...</thead>\n<tbody>\n  <tr>${afterRow}</tr>\n  ${rows.length > 1 ? `... +${rows.length - 1} 列` : ''}\n</tbody>`,
+    });
+  });
+
+  // Type 5/6 alt: inline 計數器（「瀏覽：N」「點閱:N」等直接在文字中）
+  // 這由 filterAndConvertHtml 的 inline regex 處理，不是 table thead
+  // 看一下純 text 內容是不是有「瀏覽：N」「點閱:N」這種型態
+  const textContent = (doc.body && doc.body.textContent) || '';
+  const inlineMatches = textContent.match(/(?:點閱|觀看|瀏覽|查看|點擊|閱讀|下載|訪問|到站|到訪)(?:[：:－\-＞>]\s*|\s*)\d+/g);
+  if (inlineMatches && inlineMatches.length > 0) {
+    const uniqueSamples = [...new Set(inlineMatches)].slice(0, 5);
+    // 不重複加入 Type 5/6 — 用一個獨立標記表示「inline counter」
+    // 但如果已經有 Type 5/6 (table)，就跳過避免重複報告
+    const hasTablePattern = results.some(r => r.type === 5 || r.type === 6);
+    if (!hasTablePattern) {
+      const isList = inlineMatches.length > 3;
+      results.push({
+        type: isList ? 6 : 5,
+        evidence: `找到 inline 計數器 ${inlineMatches.length} 個（不在 table 結構中，例如：${uniqueSamples.join(', ')}）`,
+        before: uniqueSamples.join(' | '),
+        after: '(已由 filterAndConvertHtml 的 inline regex 自動清掉)',
+      });
+    }
+  }
+
+  // Type 8: dynamic DOM id
+  const dynIdMatches = html.match(/id="[A-Za-z]+_\d+_\d{8,}"/g);
+  if (dynIdMatches) {
+    results.push({
+      type: 8,
+      evidence: `找到 ${dynIdMatches.length} 個動態 id 屬性，例如：${dynIdMatches[0]}`,
+      before: dynIdMatches[0],
+      after: '(hash v2.3 改用 markdown 計算後不受影響)',
+    });
+  }
+
+  // Type 9: 您是第 N 位瀏覽者
+  const visitorMatches = html.match(INLINE_VISITOR_REGEX);
+  if (visitorMatches && visitorMatches.length > 0) {
+    results.push({
+      type: 9,
+      evidence: `找到 ${visitorMatches.length} 個訪客計數器，例如：${visitorMatches[0].replace(/<[^>]+>/g, '').slice(0, 40)}`,
+      before: visitorMatches[0],
+      after: '(已被 filterAndConvertHtml inline regex 清掉)',
+    });
+  }
+
+  // Type 10: Footer 更新日期
+  const footerDateMatches = html.match(INLINE_FOOTER_DATE_REGEX);
+  if (footerDateMatches && footerDateMatches.length > 0) {
+    results.push({
+      type: 10,
+      evidence: `找到 ${footerDateMatches.length} 個 footer 時間戳，例如：${footerDateMatches[0].replace(/<[^>]+>/g, '').slice(0, 40)}`,
+      before: footerDateMatches[0],
+      after: '(已被 filterAndConvertHtml inline regex 清掉)',
+    });
+  }
+
+  return { url, html, title: jsonData.title, results };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Apply rules (client-side preview)
+// ════════════════════════════════════════════════════════════════════
+// 與 utils/crawler.js 中 filterAndConvertHtml 的 inline regex 同步
+// 目的：清掉「瀏覽:123」「點閱：456」這種 thead 標頭+數字 已被 inline 表達的計數器
+const INLINE_COUNTER_REGEX = /(?:總|目前|累積|累計|統計)?(?:點閱|點閱率|點閱數|點閱次|點閱人次|點閱人數|觀看|觀看率|觀看次|觀看數|觀看人數|觀看人次|瀏覽|瀏覽率|瀏覽次|瀏覽人次|瀏覽人數|查看|查看率|查看次|查看人次|查看人數|點擊|點擊率|點擊次|點擊人次|點擊人數|閱讀|閱讀率|閱讀次|閱讀人次|閱讀人數|累積|累積率|累積次|累積人次|累積人數|到站|到站率|到站次|到站人次|到站人數|到訪|到訪人數|到訪人次|到訪次|訪問|訪問人次|訪問人數|訪問數)(?:[：:－\-＞>]\s*|\s*)\d+/g;
+
+// 新增：「您是第 N 位瀏覽者」這種倒裝結構 (busker, www.kcg... 多數政府網站 footer)
+// 容忍數字外圍有 HTML tag (<strong>) 或 markdown 強調符號 (**)
+// 對應 production 應該加在 filterAndConvertHtml 同一段
+const INLINE_VISITOR_REGEX = /您是第[\s\S]{0,30}?\d[\d,]*[\s\S]{0,15}?位\s*(?:瀏覽者|訪客|讀者|看官|訪問者|來賓)?/g;
+
+// 新增：「更新日期 YYYY-MM-DD」「最後更新 YYYY/MM/DD」這種 footer 日期戳
+// 同樣容忍中間有 HTML tag / 強調符號
+const INLINE_FOOTER_DATE_REGEX = /(?:更新日期|最後更新|最近更新|今日日期|查詢日期|系統日期|目前時間)[\s\S]{0,30}?\d{4}[\s\S]{0,5}?[-\/.]\s*\d{1,2}\s*[-\/.]\s*\d{1,2}(?:[\s\S]{0,15}?\d{1,2}:\d{2}(?::\d{2})?)?(?:\s*<\/[a-zA-Z]+>)*/g;
+
+// 鏡像 utils/crawler.js 中 filterAndConvertHtml 的「通用清洗」步驟
+// 這些是 production 在套用站點規則前一定會做的事
+function applyProductionCleanup(doc, baseUrl) {
+  // 危險屬性 / 互動元素
+  doc.querySelectorAll('[onclick], [onmouseover], [onmousedown]').forEach(el => el.remove());
+  doc.querySelectorAll('a[href^="javascript:"]').forEach(el => el.remove());
+  doc.querySelectorAll('script').forEach(el => el.remove());
+  doc.querySelectorAll('style').forEach(el => el.remove());
+  doc.querySelectorAll('a[href="#"]').forEach(el => el.remove());
+  doc.querySelectorAll('meta').forEach(el => el.remove());
+
+  // <input> + 相鄰的 picker
+  doc.querySelectorAll('input').forEach(input => {
+    const next = input.nextElementSibling;
+    input.remove();
+    if (next && next.className && /picker/.test(next.className)) {
+      next.querySelectorAll('select, table, button').forEach(el => el.remove());
+    }
+  });
+
+  doc.querySelectorAll('link').forEach(el => el.remove());
+  doc.querySelectorAll('div.toplink.nosnippet').forEach(el => el.remove());
+  doc.querySelectorAll('div.advanced_search').forEach(el => el.remove());
+  doc.querySelectorAll('a[onmousedown]').forEach(el => el.remove());
+  doc.querySelectorAll('noscript').forEach(el => el.remove());
+  doc.querySelectorAll('img').forEach(el => el.remove());
+  doc.querySelectorAll('.advertisement, .footer').forEach(el => el.remove());
+
+  // 個別 <a> 過濾
+  const mediaExt = /\.(jpg|jpeg|png|gif|webp|bmp|mp3|mp4|avi|mov|wmv|mkv|flv|webm)$/i;
+  doc.querySelectorAll('a').forEach(a => {
+    const href = a.getAttribute('href');
+    const title = a.getAttribute('title');
+    const img = a.querySelector('img');
+    const alt = img && img.getAttribute('alt');
+    if (href && href.startsWith('#')) return a.remove();
+    if (href && mediaExt.test(href)) return a.remove();
+    if (href && /html=|back|return/i.test(href)) return a.remove();
+    if (title && /回上頁|返回|back|return/i.test(title)) return a.remove();
+    if (alt && /回上頁|返回|back|return/i.test(alt)) return a.remove();
+    if (href && baseUrl) {
+      try { a.setAttribute('href', new URL(href, baseUrl).toString()); } catch (e) {}
+    }
+  });
+
+  // <iframe> → <p>src</p>
+  doc.querySelectorAll('iframe').forEach(iframe => {
+    const src = iframe.getAttribute('src');
+    if (src && src.match(/^https:\/\/www\.google\.com\/maps\/embed/)) {
+      iframe.remove();
+      return;
+    }
+    if (src) {
+      const p = doc.createElement('p');
+      p.textContent = src;
+      iframe.replaceWith(p);
+    }
+  });
+}
+
+// Turndown service (matches production crawler.js setup)
+const turndownService = typeof TurndownService !== 'undefined' ? new TurndownService() : null;
+
+// 對應 production 的 markdown 後處理（filterAndConvertHtml 最後幾行）
+function postProcessMarkdown(md) {
+  return md.trim().replace(/(\r?\n\s*){2,}/g, '\n').replace(/ {3,}/g, ' ');
+}
+
+// 對 filteredHtml 套用所有 inline regex（鏡像 production filterAndConvertHtml）
+function applyInlineRegexes(html) {
+  return html
+    .replace(/\n{2,}/g, '\n')
+    .replace(INLINE_COUNTER_REGEX, '')
+    .replace(INLINE_VISITOR_REGEX, '')
+    .replace(INLINE_FOOTER_DATE_REGEX, '');
+}
+
+// 把已清洗的 cheerio doc 轉為 markdown（mirror production）
+function docToMarkdown(doc) {
+  if (!turndownService) return '(turndown 未載入)';
+  return postProcessMarkdown(turndownService.turndown(applyInlineRegexes(doc.body.innerHTML)));
+}
+
+// 把 doc 轉成最終的 HTML 字串（mirror production filteredHtml）
+function docToFilteredHtml(doc) {
+  return applyInlineRegexes(doc.body.innerHTML);
+}
+
+// 站點規則應用
+function applySiteRules(doc) {
+  let hrefRemoved = 0;
+  let cellsCleared = 0;
+  // stripAllAHref
+  doc.querySelectorAll('a[href]').forEach(a => { a.removeAttribute('href'); hrefRemoved++; });
+  // clearTableColumnsByHeader
+  doc.querySelectorAll('table').forEach(table => {
+    const headers = [...table.querySelectorAll('thead th')];
+    if (headers.length === 0) return;
+    const colIdx = headers.findIndex(th => {
+      const t = (th.textContent || '').trim();
+      return NOISE_KEYWORDS.some(k => t.includes(k));
+    });
+    if (colIdx === -1) return;
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      if (tds[colIdx]) { tds[colIdx].textContent = ''; cellsCleared++; }
+    });
+  });
+  return { hrefRemoved, cellsCleared };
+}
+
+// ────── Production hash ──────
+// 對應 processCrawlerFiles.js:398
+//   const hash = md5(hashResult.markdown + jsonData.title + JSON.stringify(sortedMetaData) + hashVersion);
+const HASH_VERSION = 'v2.3';  // 對應 crawler_extract_time_llm_enable=false 的情況
+
+function computeProductionHash(applied, data) {
+  if (typeof md5 !== 'function') return '(md5 library 未載入)';
+  const meta = {};
+  Object.keys(data).forEach(k => {
+    if (!['title', 'text', 'url', 'html'].includes(k)) meta[k] = data[k];
+  });
+  const sortedMeta = Object.fromEntries(Object.entries(meta).sort());
+  const input = (applied.markdown || '') + (data.title || '') + JSON.stringify(sortedMeta) + HASH_VERSION;
+  return md5(input);
+}
+
+// ────── Line diff (Myers-light，含 prefix/suffix 快速跳過) ──────
+function lineDiff(a, b) {
+  const aLines = a.split('\n');
+  const bLines = b.split('\n');
+
+  // 跳過相同前綴
+  let prefix = 0;
+  while (prefix < aLines.length && prefix < bLines.length && aLines[prefix] === bLines[prefix]) prefix++;
+  // 跳過相同後綴
+  let suffix = 0;
+  while (
+    suffix < aLines.length - prefix &&
+    suffix < bLines.length - prefix &&
+    aLines[aLines.length - 1 - suffix] === bLines[bLines.length - 1 - suffix]
+  ) suffix++;
+
+  const aMid = aLines.slice(prefix, aLines.length - suffix);
+  const bMid = bLines.slice(prefix, bLines.length - suffix);
+
+  // 中段超大時直接全部標為 remove + add
+  let midResult;
+  if (aMid.length * bMid.length > 2_000_000) {
+    midResult = [
+      ...aMid.map(l => ({ type: 'remove', a: l })),
+      ...bMid.map(l => ({ type: 'add', b: l })),
+    ];
+  } else {
+    // LCS DP
+    const dp = Array(aMid.length + 1).fill(null).map(() => new Uint16Array(bMid.length + 1));
+    for (let i = 1; i <= aMid.length; i++) {
+      for (let j = 1; j <= bMid.length; j++) {
+        if (aMid[i - 1] === bMid[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+        else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+    midResult = [];
+    let i = aMid.length, j = bMid.length;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && aMid[i - 1] === bMid[j - 1]) { midResult.unshift({ type: 'same', a: aMid[i - 1], b: bMid[j - 1] }); i--; j--; }
+      else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) { midResult.unshift({ type: 'add', b: bMid[j - 1] }); j--; }
+      else { midResult.unshift({ type: 'remove', a: aMid[i - 1] }); i--; }
+    }
+  }
+
+  return [
+    ...aLines.slice(0, prefix).map(l => ({ type: 'same', a: l, b: l })),
+    ...midResult,
+    ...aLines.slice(aLines.length - suffix).map(l => ({ type: 'same', a: l, b: l })),
+  ];
+}
+
+function renderLineDiff(diff) {
+  const left = [];
+  const right = [];
+  for (const ln of diff) {
+    if (ln.type === 'same') {
+      const e = escapeHtml(ln.a);
+      left.push(`<div class="diff-line">${e || '&nbsp;'}</div>`);
+      right.push(`<div class="diff-line">${e || '&nbsp;'}</div>`);
+    } else if (ln.type === 'remove') {
+      left.push(`<div class="diff-line diff-rem">${escapeHtml(ln.a) || '&nbsp;'}</div>`);
+      right.push(`<div class="diff-line diff-empty">&nbsp;</div>`);
+    } else if (ln.type === 'add') {
+      left.push(`<div class="diff-line diff-empty">&nbsp;</div>`);
+      right.push(`<div class="diff-line diff-add">${escapeHtml(ln.b) || '&nbsp;'}</div>`);
+    }
+  }
+  return { left: left.join(''), right: right.join('') };
+}
+
+function applyAllRules(html, baseUrl) {
+  // 路徑 A：production filterAndConvertHtml（通用清洗，不含站點規則）
+  // 這份結果對應入庫的 content / markdown
+  const beforeDoc = new DOMParser().parseFromString(html, 'text/html');
+  applyProductionCleanup(beforeDoc, baseUrl);
+  const beforeHtml = docToFilteredHtml(beforeDoc);
+  const beforeMarkdown = docToMarkdown(beforeDoc);
+
+  // 路徑 B：filterAndConvertHtmlForHash（通用清洗 + 站點規則）
+  // 這份結果用於 hash 計算
+  const afterDoc = new DOMParser().parseFromString(html, 'text/html');
+  applyProductionCleanup(afterDoc, baseUrl);
+  const { hrefRemoved, cellsCleared } = applySiteRules(afterDoc);
+  const afterHtml = docToFilteredHtml(afterDoc);
+  const afterMarkdown = docToMarkdown(afterDoc);
+
+  return {
+    html: afterHtml,
+    markdown: afterMarkdown,
+    beforeHtml,
+    beforeMarkdown,
+    hrefRemoved,
+    cellsCleared,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Rendering
+// ════════════════════════════════════════════════════════════════════
+function render(jsonData) {
+  const analysis = analyze(jsonData);
+  const applied = applyAllRules(analysis.html, analysis.url);
+
+  // Meta
+  const metaList = document.getElementById('metaList');
+  metaList.innerHTML = [
+    ['URL', analysis.url || '(無)'],
+    ['Title', analysis.title || '(無)'],
+    ['HTML size', `${analysis.html.length.toLocaleString()} chars`],
+    ['偵測到 pattern 數', `${analysis.results.length}`],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join('');
+
+  // Patterns
+  const patternsEl = document.getElementById('patterns');
+  const patternsTitle = document.getElementById('patternsTitle');
+  if (analysis.results.length === 0) {
+    patternsTitle.textContent = '沒有偵測到任何 pattern';
+    patternsEl.innerHTML = `<div class="no-patterns">這份文件目前看起來沒有已知的假異動風險 ✓</div>`;
+  } else {
+    patternsTitle.textContent = `偵測到的 pattern（${analysis.results.length}）`;
+    patternsEl.innerHTML = analysis.results.map(r => renderPattern(r)).join('');
+  }
+
+  // Stats
+  document.getElementById('stats').innerHTML = `
+    <div class="stat-item">
+      <span class="num">${applied.hrefRemoved}</span>
+      <span class="lbl">href 屬性被移除</span>
+    </div>
+    <div class="stat-item">
+      <span class="num">${applied.cellsCleared}</span>
+      <span class="lbl">表格 cell 被清空（提案中）</span>
+    </div>
+    <div class="stat-item">
+      <span class="num">${analysis.results.length}</span>
+      <span class="lbl">偵測到的 pattern 類型</span>
+    </div>
+    <div class="stat-item">
+      <span class="num">${analysis.results.filter(r => PATTERN_DEFS[r.type].status === 'solved').length}</span>
+      <span class="lbl">已可被現有規則處理</span>
+    </div>
+  `;
+
+  // HTML preview (iframes)
+  document.getElementById('previewBefore').srcdoc = wrapForPreview(analysis.html, analysis.url);
+  document.getElementById('previewAfter').srcdoc = wrapForPreview(applied.html, analysis.url);
+
+  // Markdown 對比 (production hash 真正比的東西) — 用 line-level diff highlighting
+  const mdBefore = applied.beforeMarkdown || '';
+  const mdAfter = applied.markdown || '';
+  let changedLines = 0;
+  if (mdBefore || mdAfter) {
+    const diff = lineDiff(mdBefore, mdAfter);
+    changedLines = diff.filter(l => l.type !== 'same').length;
+    const rendered = renderLineDiff(diff);
+    document.getElementById('mdBefore').innerHTML = rendered.left;
+    document.getElementById('mdAfter').innerHTML = rendered.right;
+  } else {
+    document.getElementById('mdBefore').textContent = '(turndown 未載入)';
+    document.getElementById('mdAfter').textContent = '(turndown 未載入)';
+  }
+  const mdSame = mdBefore === mdAfter;
+  const mdDelta = mdBefore.length - mdAfter.length;
+  // 計算實際的 production md5 hash
+  const productionHash = computeProductionHash(applied, jsonData);
+  document.getElementById('mdSummary').innerHTML = (mdSame
+    ? `<span class="note-label" style="color: var(--solved)">✓ 兩邊 markdown 完全相同</span><p>表示站點規則沒對這個檔案造成影響（沒有 a href、沒有匹配的瀏覽欄）。</p>`
+    : `<span class="note-label">Markdown 差異</span><p>站點規則讓 markdown 縮短了 <strong>${mdDelta.toLocaleString()}</strong> 字（${mdBefore.length.toLocaleString()} → ${mdAfter.length.toLocaleString()}），共 <strong>${changedLines}</strong> 行有變化。</p>`
+  ) + `<div style="margin-top: 12px;">
+        <span class="hash-display">
+          <span class="label">Production md5</span>
+          <span class="value">${productionHash}</span>
+          <button data-copy-hash="${productionHash}">Copy</button>
+        </span>
+        <span style="font-size: 12px; color: var(--ink-faint); margin-left: 8px;">這就是 production DB 裡 crawler_documents_content.hash 欄位的值（前提是規則一致）</span>
+      </div>`;
+  // Wire up copy button (event delegation safer than inline onclick)
+  document.querySelectorAll('[data-copy-hash]').forEach(btn => {
+    btn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copyHash);
+        btn.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1200);
+      } catch (e) {}
+    };
+  });
+
+  // HTML source (collapsed)
+  document.getElementById('htmlBefore').textContent = formatHtml(analysis.html);
+  document.getElementById('htmlAfter').textContent = formatHtml(applied.html);
+
+  document.getElementById('results').classList.add('visible');
+  document.getElementById('error').innerHTML = '';
+}
+
+function renderPattern(r) {
+  const def = PATTERN_DEFS[r.type];
+  const num = String(r.type).padStart(2, '0');
+  return `
+    <article class="p-card">
+      <div class="p-head">
+        <div class="p-num">${num}</div>
+        <h3 class="p-name">${escapeHtml(def.name)}</h3>
+        <span class="badge ${def.status}">${def.status}</span>
+      </div>
+      <dl class="p-fields">
+        <dt>證據</dt>
+        <dd>${r.evidence}</dd>
+        <dt>對應規則</dt>
+        <dd><code class="inline">${escapeHtml(def.rule)}</code></dd>
+        <dt>前後對比</dt>
+        <dd>
+          <div class="snippet-diff">
+            <div class="snip snip-before">
+              <div class="snip-head">Before</div>
+              <pre>${r.before}</pre>
+            </div>
+            <div class="snip snip-after">
+              <div class="snip-head">After</div>
+              <pre>${r.after}</pre>
+            </div>
+          </div>
+        </dd>
+      </dl>
+    </article>
+  `;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Helpers
+// ════════════════════════════════════════════════════════════════════
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function truncate(s, n) {
+  if (!s) return '';
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function formatHtml(html) {
+  // Light-weight pretty print: line break before each tag
+  if (!html) return '';
+  return html
+    .replace(/></g, '>\n<')
+    .replace(/\n{2,}/g, '\n')
+    .slice(0, 30000); // safety
+}
+
+// 把 raw scraped html 包成可以單獨在 iframe 渲染的完整文件
+function wrapForPreview(html, sourceUrl) {
+  let baseHref = '';
+  try {
+    const u = new URL(sourceUrl);
+    // base 指向 URL 所在目錄，讓相對連結 hover 時能顯示完整路徑
+    baseHref = `${u.origin}${u.pathname.replace(/[^/]*$/, '')}`;
+  } catch (e) {}
+
+  // 抽出 body 內容（如果原始 html 已含 <body>）
+  let bodyContent = html;
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch) bodyContent = bodyMatch[1];
+
+  const baseTag = baseHref ? `<base href="${baseHref}">` : '';
+
+  return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">${baseTag}
+<style>
+  body { font-family: 'Noto Sans TC', system-ui, sans-serif; margin: 0; padding: 16px; line-height: 1.5; color: #1B1612; background: #fff; }
+  table { border-collapse: collapse; margin: 12px 0; width: 100%; max-width: 100%; }
+  th, td { padding: 6px 10px; border: 1px solid #e0d6c2; vertical-align: top; }
+  th { background: #f4efe4; font-weight: 600; text-align: left; }
+  a { color: #7A1818; }
+  a:not([href]) { color: #1B1612; text-decoration: none; }
+  img { max-width: 100%; height: auto; }
+  /* 醒目標示「被清空」的 td */
+  td:empty { background: rgba(122, 24, 24, 0.04); }
+  /* 醒目標示「被拿掉 href 的 a 標籤」 */
+  a:not([href]) { background: rgba(44, 95, 45, 0.06); padding: 0 2px; border-radius: 2px; }
+</style>
+</head><body>${bodyContent}</body></html>`;
+}
+
+function showError(msg) {
+  document.getElementById('error').innerHTML = `<div class="error">${escapeHtml(msg)}</div>`;
+  document.getElementById('results').classList.remove('visible');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// File handling
+// ════════════════════════════════════════════════════════════════════
+// ──────────────────────────────────────────────────────────────
+// Global: prevent browser from opening files dropped anywhere outside dropzones
+// ──────────────────────────────────────────────────────────────
+['dragover', 'drop'].forEach(ev => {
+  window.addEventListener(ev, (e) => e.preventDefault(), false);
+});
+
+// ──────────────────────────────────────────────────────────────
+// Reusable dropzone setup
+// ──────────────────────────────────────────────────────────────
+function setupDropzone(dzEl, onFiles) {
+  if (!dzEl) return;
+  let dragCounter = 0;
+  dzEl.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    dzEl.classList.add('dragging');
+  });
+  dzEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+  dzEl.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter = Math.max(0, dragCounter - 1);
+    if (dragCounter === 0) dzEl.classList.remove('dragging');
+  });
+  dzEl.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
+    dzEl.classList.remove('dragging');
+    const files = await collectFilesFromDataTransfer(e.dataTransfer);
+    if (files.length > 0) onFiles(files);
+  });
+}
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const folderInput = document.getElementById('folderInput');
+
+function readJsonFile(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = (e) => {
+      try { resolve(JSON.parse(e.target.result)); }
+      catch (err) { reject(err); }
+    };
+    r.onerror = () => reject(new Error('讀取檔案失敗'));
+    r.readAsText(file);
+  });
+}
+
+function clearResults() {
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('batchResults').style.display = 'none';
+  document.getElementById('error').innerHTML = '';
+}
+
+async function handleFiles(files) {
+  // Filter for .json only
+  files = files.filter(f => f.name.toLowerCase().endsWith('.json'));
+  if (files.length === 0) return showError('沒有找到任何 .json 檔案');
+  clearResults();
+
+  if (files.length === 1) {
+    // Single-file mode: detailed view
+    try {
+      const data = await readJsonFile(files[0]);
+      if (typeof data.html !== 'string') return showError('檔案中找不到 html 欄位');
+      render(data);
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      showError(`無法解析 JSON：${err.message}`);
+    }
+  } else {
+    // Batch mode
+    await runBatch(files);
+  }
+}
+
+async function runBatch(files) {
+  const batchEl = document.getElementById('batchResults');
+  batchEl.style.display = 'block';
+  document.getElementById('batchTitle').textContent = `批次分析結果（共 ${files.length} 個檔案）`;
+
+  // Progress UI (insert/replace at top of batchEl)
+  let progressEl = document.getElementById('batchProgress');
+  if (!progressEl) {
+    progressEl = document.createElement('div');
+    progressEl.id = 'batchProgress';
+    progressEl.className = 'batch-progress';
+    batchEl.insertBefore(progressEl, batchEl.firstChild);
+  }
+  progressEl.innerHTML = `
+    <div class="label">Processing</div>
+    <div class="bar"><span id="batchBar" style="width:0%"></span></div>
+    <div class="num"><span id="batchCount">0</span> / ${files.length}</div>
+  `;
+  const bar = document.getElementById('batchBar');
+  const count = document.getElementById('batchCount');
+
+  const results = [];
+  const startTime = performance.now();
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    try {
+      const data = await readJsonFile(f);
+      if (typeof data.html !== 'string') {
+        results.push({ file: f.name, error: '缺少 html 欄位' });
+      } else {
+        const a = analyze(data);
+        results.push({
+          file: f.name,
+          url: a.url,
+          title: a.title,
+          patterns: a.results.map(r => r.type),
+          patternEvidence: a.results.map(r => ({ type: r.type, evidence: r.evidence })),
+          _fileRef: f,  // 保留 File 物件以便 drill-down 時重新讀取
+        });
+      }
+    } catch (err) {
+      results.push({ file: f.name, error: err.message });
+    }
+    if ((i + 1) % 20 === 0 || i + 1 === files.length) {
+      count.textContent = (i + 1);
+      bar.style.width = ((i + 1) / files.length * 100) + '%';
+      await new Promise(r => setTimeout(r, 0)); // yield to UI
+    }
+  }
+  const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+  progressEl.innerHTML = `<div class="label">Done</div><div class="num">${files.length} 個檔案 · ${elapsed} 秒</div>`;
+
+  renderBatchSummary(results);
+  batchEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderBatchSummary(results) {
+  const total = results.length;
+  const clean = results.filter(r => !r.error && r.patterns.length === 0).length;
+  const errored = results.filter(r => r.error).length;
+  const counts = {};  // type -> count
+  for (const r of results) {
+    if (r.error) continue;
+    for (const t of new Set(r.patterns)) counts[t] = (counts[t] || 0) + 1;
+  }
+
+  // Summary cards
+  const cardsEl = document.getElementById('batchCards');
+  const cards = [
+    { type: '—', name: '總檔案數', count: total, cls: '' },
+    { type: '—', name: '完全乾淨（無 pattern）', count: clean, cls: 'clean' },
+    { type: '—', name: '讀取失敗', count: errored, cls: errored > 0 ? 'has-hits' : '' },
+  ];
+  for (const t of [1,2,3,4,5,6,7,8]) {
+    const def = PATTERN_DEFS[t];
+    cards.push({
+      type: `Type ${String(t).padStart(2, '0')}`,
+      name: def.name,
+      count: counts[t] || 0,
+      cls: counts[t] ? 'has-hits' : 'clean',
+    });
+  }
+  cardsEl.innerHTML = cards.map(c => `
+    <div class="bs-card ${c.cls}">
+      <div class="type">${c.type}</div>
+      <div class="name">${escapeHtml(c.name)}</div>
+      <div><span class="count">${c.count}</span>${c.count > 0 ? `<span class="of-total">/ ${total}</span>` : ''}</div>
+    </div>
+  `).join('');
+
+  // File list
+  const listEl = document.getElementById('batchList');
+  const renderList = (rows) => {
+    if (rows.length === 0) {
+      listEl.innerHTML = `<div class="batch-empty">沒有符合條件的檔案</div>`;
+      return;
+    }
+    listEl.innerHTML = `
+      <div class="batch-list-head">
+        <div>Types</div>
+        <div>File / URL</div>
+        <div>Patterns</div>
+      </div>
+      ${rows.map((r, idx) => {
+        if (r.error) {
+          return `<div class="batch-row clean" data-idx="${results.indexOf(r)}">
+            <div class="types">—</div>
+            <div class="filename">${escapeHtml(r.file)}<br><span style="color: var(--open); font-family: var(--body)">${escapeHtml(r.error)}</span></div>
+            <div><span class="pattern-pill" style="background: var(--open-bg); color: var(--open)">ERROR</span></div>
+          </div>`;
+        }
+        const cleanRow = r.patterns.length === 0;
+        const pills = r.patterns.length === 0
+          ? '<span style="color: var(--solved); font-family: var(--mono); font-size: 11px;">✓ clean</span>'
+          : r.patterns.map(t => `<span class="pattern-pill">T${String(t).padStart(2, '0')}</span>`).join('');
+        return `<div class="batch-row ${cleanRow ? 'clean' : ''}" data-idx="${results.indexOf(r)}">
+          <div class="types">${r.patterns.length === 0 ? '—' : r.patterns.length}</div>
+          <div>
+            <div class="filename">${escapeHtml(r.file)}</div>
+            <div style="font-size: 12px; color: var(--ink-faint); margin-top: 2px;">${escapeHtml((r.url || '').slice(0, 90))}${(r.url||'').length > 90 ? '…' : ''}</div>
+          </div>
+          <div class="pattern-pills">${pills}</div>
+        </div>`;
+      }).join('')}
+    `;
+    // Wire up row click → open drawer with single-file detail
+    listEl.querySelectorAll('.batch-row[data-idx]').forEach(row => {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', async () => {
+        const idx = parseInt(row.dataset.idx);
+        const r = results[idx];
+        if (!r || r.error || !r._fileRef) return;
+        try {
+          const data = await readJsonFile(r._fileRef);
+          openBatchDrawer(data, r);
+        } catch (e) {
+          console.error('drill-down failed', e);
+        }
+      });
+    });
+  };
+
+  // Filter state
+  let currentFilter = 'all';
+  let currentSearch = '';
+  const applyFilters = () => {
+    let rows = results;
+    if (currentFilter === 'has-pattern') rows = rows.filter(r => !r.error && r.patterns.length > 0);
+    else if (currentFilter === 'clean') rows = rows.filter(r => !r.error && r.patterns.length === 0);
+    if (currentSearch) {
+      const q = currentSearch.toLowerCase();
+      rows = rows.filter(r => (r.file || '').toLowerCase().includes(q) || (r.url || '').toLowerCase().includes(q));
+    }
+    renderList(rows);
+  };
+
+  document.querySelectorAll('.batch-filter .filter-chip').forEach(chip => {
+    chip.onclick = () => {
+      document.querySelectorAll('.batch-filter .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentFilter = chip.dataset.filter;
+      applyFilters();
+    };
+  });
+  document.getElementById('batchSearch').oninput = (e) => {
+    currentSearch = e.target.value;
+    applyFilters();
+  };
+
+  applyFilters();
+}
+
+fileInput.addEventListener('change', (e) => handleFiles([...e.target.files]));
+folderInput.addEventListener('change', (e) => handleFiles([...e.target.files]));
+dropzone.addEventListener('click', () => {
+  fileInput.value = '';
+  fileInput.click();
+});
+document.getElementById('pickFolderBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  folderInput.value = '';
+  folderInput.click();
+});
+dropzone.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    dropzone.click();
+  }
+});
+
+setupDropzone(dropzone, (files) => handleFiles(files));
+
+// 拖檔案 / 資料夾。
+// 重點：對「單檔」用 item.getAsFile()（最可靠），只有「資料夾」才用 entry API 遞迴。
+// 原因：entry.file() 在 file:// 協定或某些 Chrome 版本會 silently 失敗，但 getAsFile() 始終有效。
+async function collectFilesFromDataTransfer(dt) {
+  const items = dt.items ? [...dt.items] : null;
+  if (!items || items.length === 0) {
+    return [...(dt.files || [])];
+  }
+
+  const tasks = [];
+  for (const item of items) {
+    if (item.kind !== 'file') continue;
+    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    if (entry && entry.isDirectory) {
+      // 資料夾：必須走 entry API 才能遞迴
+      tasks.push(readDirectoryRecursive(entry));
+    } else {
+      // 一般檔案：用 getAsFile()（不會被 entry API 的限制影響）
+      const f = item.getAsFile();
+      if (f) tasks.push(Promise.resolve([f]));
+    }
+  }
+  const arrays = await Promise.all(tasks);
+  return arrays.flat();
+}
+
+function readDirectoryRecursive(dirEntry) {
+  return new Promise((resolve) => {
+    const reader = dirEntry.createReader();
+    const allFiles = [];
+    const readBatch = () => {
+      reader.readEntries(async (entries) => {
+        if (entries.length === 0) return resolve(allFiles);
+        const batchTasks = entries.map((ent) => {
+          if (ent.isFile) {
+            return new Promise((r) => {
+              ent.file((f) => r([f]), () => r([]));
+            });
+          } else if (ent.isDirectory) {
+            return readDirectoryRecursive(ent);
+          }
+          return Promise.resolve([]);
+        });
+        const results = await Promise.all(batchTasks);
+        for (const arr of results) allFiles.push(...arr);
+        readBatch();  // readEntries returns in chunks of 100
+      }, () => resolve(allFiles));
+    };
+    readBatch();
+  });
+}
+
+// Samples: load from common files
+document.querySelectorAll('[data-sample]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const map = {
+      bulletin: './samples/coia_kcg_gov_tw_web_tw_cms_bulletin_php_appId_hrBulletin_n_about.html.json',
+      emphasis: './samples/coia_kcg_gov_tw_web_tw_cms_emphasis_detail_php_id_570_n_Emphasis_page_2.html.json',
+      subsidy: './samples/coia_kcg_gov_tw_web_tw_cms_subsidy_detail_php_id_2174_n_Services_appId_Services2025072500004.html.json',
+    };
+    const path = map[btn.dataset.sample];
+    try {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`HTTP ${res.status} — 範例檔案需要 local server 才能載入`);
+      const data = await res.json();
+      render(data);
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      showError(`載入範例失敗：${err.message}（試試直接拖一個 JSON 檔上來）`);
+    }
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// Mode switch
+// ════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const mode = btn.dataset.mode;
+    document.getElementById('singleMode').style.display = mode === 'single' ? 'block' : 'none';
+    document.getElementById('compareMode').style.display = mode === 'compare' ? 'block' : 'none';
+    clearResults();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// Compare mode
+// ════════════════════════════════════════════════════════════════════
+let compareFilesA = null;
+let compareFilesB = null;
+
+const dropzoneA = document.getElementById('dropzoneA');
+const dropzoneB = document.getElementById('dropzoneB');
+const folderInputA = document.getElementById('folderInputA');
+const folderInputB = document.getElementById('folderInputB');
+const runCompareBtn = document.getElementById('runCompareBtn');
+const resetCompareBtn = document.getElementById('resetCompareBtn');
+const compareHint = document.getElementById('compareHint');
+
+function updateCompareReady() {
+  const aOk = compareFilesA && compareFilesA.length > 0;
+  const bOk = compareFilesB && compareFilesB.length > 0;
+  dropzoneA.classList.toggle('ready', aOk);
+  dropzoneB.classList.toggle('ready', bOk);
+  document.getElementById('zStatusA').textContent = aOk ? `已選擇 ${compareFilesA.length} 個 .json 檔` : '尚未選擇 — 拖資料夾或點擊';
+  document.getElementById('zStatusB').textContent = bOk ? `已選擇 ${compareFilesB.length} 個 .json 檔` : '尚未選擇 — 拖資料夾或點擊';
+  runCompareBtn.disabled = !(aOk && bOk);
+  compareHint.textContent = (aOk && bOk) ? '可以開始對比' : '兩邊資料夾都選好後，按下「開始對比」';
+}
+
+function setCompareFiles(side, files) {
+  files = files.filter(f => f.name.toLowerCase().endsWith('.json'));
+  if (side === 'A') compareFilesA = files;
+  else compareFilesB = files;
+  updateCompareReady();
+}
+
+setupDropzone(dropzoneA, (files) => setCompareFiles('A', files));
+setupDropzone(dropzoneB, (files) => setCompareFiles('B', files));
+dropzoneA.addEventListener('click', () => { folderInputA.value = ''; folderInputA.click(); });
+dropzoneB.addEventListener('click', () => { folderInputB.value = ''; folderInputB.click(); });
+folderInputA.addEventListener('change', (e) => setCompareFiles('A', [...e.target.files]));
+folderInputB.addEventListener('change', (e) => setCompareFiles('B', [...e.target.files]));
+
+resetCompareBtn.addEventListener('click', () => {
+  compareFilesA = compareFilesB = null;
+  updateCompareReady();
+  document.getElementById('compareResults').style.display = 'none';
+});
+
+runCompareBtn.addEventListener('click', () => runCompare());
+
+// ──────────────────────────────────────────────────────────────
+// Compare execution
+// ──────────────────────────────────────────────────────────────
+async function runCompare() {
+  const resultsEl = document.getElementById('compareResults');
+  resultsEl.style.display = 'block';
+  resultsEl.innerHTML = `
+    <div class="section-num">§ 01 · Processing</div>
+    <div class="batch-progress">
+      <div class="label" id="cmpStage">Indexing folder A…</div>
+      <div class="bar"><span id="cmpBar" style="width:0%"></span></div>
+      <div class="num" id="cmpCount">0 / 0</div>
+    </div>
+  `;
+
+  const update = (stage, i, total) => {
+    document.getElementById('cmpStage').textContent = stage;
+    document.getElementById('cmpBar').style.width = (total ? (i / total) * 100 : 0) + '%';
+    document.getElementById('cmpCount').textContent = `${i} / ${total}`;
+  };
+
+  const startTime = performance.now();
+  const indexA = await indexFolderForCompare(compareFilesA, (i, t) => update('Indexing folder A…', i, t));
+  const indexB = await indexFolderForCompare(compareFilesB, (i, t) => update('Indexing folder B…', i, t));
+
+  // Pair up by URL
+  const urlsA = new Set([...indexA.keys()]);
+  const urlsB = new Set([...indexB.keys()]);
+  const common = [...urlsA].filter(u => urlsB.has(u));
+  const onlyA = [...urlsA].filter(u => !urlsB.has(u)).map(u => indexA.get(u));
+  const onlyB = [...urlsB].filter(u => !urlsA.has(u)).map(u => indexB.get(u));
+
+  const sameHash = [];
+  const diffHash = [];
+  for (const url of common) {
+    const a = indexA.get(url);
+    const b = indexB.get(url);
+    if (a.repHash === b.repHash) sameHash.push({ url, a, b });
+    else diffHash.push({ url, a, b });
+  }
+
+  const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+  renderCompareResults({
+    countA: compareFilesA.length,
+    countB: compareFilesB.length,
+    indexedA: indexA.size,
+    indexedB: indexB.size,
+    sameHash, diffHash, onlyA, onlyB, elapsed,
+  });
+}
+
+async function indexFolderForCompare(files, onProgress) {
+  const map = new Map();
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const data = await readJsonFile(files[i]);
+      if (!data.url || typeof data.html !== 'string') continue;
+      const applied = applyAllRules(data.html, data.url);
+      const meta = {};
+      Object.keys(data).forEach(k => {
+        if (!['title', 'text', 'url', 'html'].includes(k)) meta[k] = data[k];
+      });
+      const sortedMeta = Object.fromEntries(Object.entries(meta).sort());
+      // 跟 production hash 算法一致：用 markdown，不是 html
+      // 用 md5 直接算（如果 library 載入了），否則退回 sha256 做 set 比對
+      const prodHash = computeProductionHash(applied, data);
+      const repHash = (typeof md5 === 'function') ? prodHash : await sha256((applied.markdown || '') + (data.title || '') + JSON.stringify(sortedMeta));
+      const patterns = analyze(data).results;
+      map.set(data.url, {
+        url: data.url, file: files[i].name,
+        title: data.title || '',
+        applied, repHash, prodHash, patterns,
+        rawHtml: data.html,
+      });
+    } catch (e) {}
+    if (i % 30 === 0 || i + 1 === files.length) {
+      onProgress?.(i + 1, files.length);
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  return map;
+}
+
+async function sha256(str) {
+  const buf = new TextEncoder().encode(str);
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function renderCompareResults({ countA, countB, indexedA, indexedB, sameHash, diffHash, onlyA, onlyB, elapsed }) {
+  const resultsEl = document.getElementById('compareResults');
+  const total = sameHash.length + diffHash.length + onlyA.length + onlyB.length;
+  const cleanRatio = total > 0 ? ((sameHash.length / (sameHash.length + diffHash.length)) * 100).toFixed(1) : '—';
+
+  // Top stats
+  const statsCards = `
+    <div class="batch-summary">
+      <div class="bs-card">
+        <div class="type">Folder A</div>
+        <div class="name">總檔案數</div>
+        <div><span class="count">${countA}</span><span class="of-total">/ ${indexedA} 有 URL</span></div>
+      </div>
+      <div class="bs-card">
+        <div class="type">Folder B</div>
+        <div class="name">總檔案數</div>
+        <div><span class="count">${countB}</span><span class="of-total">/ ${indexedB} 有 URL</span></div>
+      </div>
+      <div class="bs-card clean">
+        <div class="type">SAME</div>
+        <div class="name">共同 URL · hash 一致</div>
+        <div><span class="count">${sameHash.length}</span><span class="of-total">${cleanRatio}%</span></div>
+      </div>
+      <div class="bs-card ${diffHash.length > 0 ? 'has-hits' : 'clean'}">
+        <div class="type">DIFF</div>
+        <div class="name">共同 URL · hash 不同</div>
+        <div><span class="count">${diffHash.length}</span></div>
+      </div>
+      <div class="bs-card ${onlyA.length > 0 ? 'has-hits' : 'clean'}">
+        <div class="type">A-ONLY</div>
+        <div class="name">僅 Folder A 有（消失）</div>
+        <div><span class="count">${onlyA.length}</span></div>
+      </div>
+      <div class="bs-card ${onlyB.length > 0 ? 'has-hits' : 'clean'}">
+        <div class="type">B-ONLY</div>
+        <div class="name">僅 Folder B 有（新增）</div>
+        <div><span class="count">${onlyB.length}</span></div>
+      </div>
+    </div>
+  `;
+
+  const interpretation = `
+    <div class="note" style="margin: 16px 0;">
+      <span class="note-label">解讀</span>
+      <p>共同 URL 中 hash 不同的 <strong>${diffHash.length}</strong> 對是「真實內容變動」（規則已套用）；URL 只在某一邊的是「真正新增 / 刪除」。
+      若 <code>hash 不同</code> 數量很大，可能還有未涵蓋的 noise pattern，可以從這些檔案找新的規則機會。</p>
+    </div>
+  `;
+
+  let html = `
+    <div class="section-num">§ 01 · Summary · ${elapsed}s</div>
+    <h2>對比結果</h2>
+    ${statsCards}
+    ${interpretation}
+    <div class="export-bar" style="margin-bottom: 24px;">
+      <span class="export-label">下載報告：</span>
+      <button id="exportCsvBtn">CSV</button>
+      <button id="exportMdBtn">Markdown</button>
+      <button id="exportJsonBtn">JSON</button>
+    </div>
+  `;
+
+  // Rule suggestion section (基於 DIFF 自動建議新規則)
+  if (diffHash.length > 0) {
+    const suggestions = suggestNewRules(diffHash);
+    if (suggestions.length > 0) {
+      html += `
+        <div class="section-num">§ 02 · 規則建議（自動聚類分析）</div>
+        <h2>從 DIFF 找出的可能新 noise pattern</h2>
+        <p style="color: var(--ink-quiet); font-size: 14px; margin: 0 0 16px;">
+          自動聚類 ${diffHash.length} 對 DIFF 的差異片段，找出最常重複出現的「模式」。
+          如果某個模式涵蓋大量檔案，很可能是值得新增規則的 noise。
+        </p>
+        <div class="suggestions">
+          ${suggestions.map((s, i) => renderSuggestion(s, i)).join('')}
+        </div>
+      `;
+    }
+  }
+
+  if (diffHash.length > 0) {
+    html += `
+      <div class="section-num">§ 02 · Hash 不同（共同 URL，內容變了）</div>
+      <h2>共 ${diffHash.length} 對需要關注</h2>
+      <div class="compare-section" id="diffSection">
+        ${diffHash.slice(0, 200).map((p, i) => renderComparePair(p, i)).join('')}
+        ${diffHash.length > 200 ? `<p style="text-align:center; color: var(--ink-faint); padding: 16px;">… 另外 ${diffHash.length - 200} 對未顯示（避免瀏覽器卡頓）</p>` : ''}
+      </div>
+    `;
+  }
+
+  if (onlyA.length > 0) {
+    html += `
+      <div class="section-num">§ 03 · 僅 Folder A 有（消失）</div>
+      <h2>共 ${onlyA.length} 個</h2>
+      <div class="batch-list">
+        <div class="batch-list-head">
+          <div>Types</div><div>File / URL</div><div>Patterns</div>
+        </div>
+        ${onlyA.slice(0, 200).map(r => renderOnlyOneRow(r)).join('')}
+        ${onlyA.length > 200 ? `<div class="batch-empty">… 另外 ${onlyA.length - 200} 個未顯示</div>` : ''}
+      </div>
+    `;
+  }
+
+  if (onlyB.length > 0) {
+    html += `
+      <div class="section-num">§ 04 · 僅 Folder B 有（新增）</div>
+      <h2>共 ${onlyB.length} 個</h2>
+      <div class="batch-list">
+        <div class="batch-list-head">
+          <div>Types</div><div>File / URL</div><div>Patterns</div>
+        </div>
+        ${onlyB.slice(0, 200).map(r => renderOnlyOneRow(r)).join('')}
+        ${onlyB.length > 200 ? `<div class="batch-empty">… 另外 ${onlyB.length - 200} 個未顯示</div>` : ''}
+      </div>
+    `;
+  }
+
+  if (diffHash.length === 0 && onlyA.length === 0 && onlyB.length === 0) {
+    html += `
+      <div class="no-patterns">兩個資料夾完全一致 — 沒有任何假/真異動 ✓</div>
+    `;
+  }
+
+  resultsEl.innerHTML = html;
+
+  // Stash for lazy iframe load
+  window._diffPairs = diffHash;
+  // Stash full results for export
+  window._compareResults = { countA, countB, indexedA, indexedB, sameHash, diffHash, onlyA, onlyB, elapsed };
+
+  // Wire up export buttons
+  const exportCsv = document.getElementById('exportCsvBtn');
+  if (exportCsv) exportCsv.onclick = () => downloadFile(buildCsvReport(window._compareResults), 'compare-report.csv', 'text/csv');
+  const exportMd = document.getElementById('exportMdBtn');
+  if (exportMd) exportMd.onclick = () => downloadFile(buildMarkdownReport(window._compareResults), 'compare-report.md', 'text/markdown');
+  const exportJson = document.getElementById('exportJsonBtn');
+  if (exportJson) exportJson.onclick = () => downloadFile(buildJsonReport(window._compareResults), 'compare-report.json', 'application/json');
+
+  // Wire up pair expansion + lazy iframe / md-diff load
+  resultsEl.querySelectorAll('.compare-pair').forEach(el => {
+    el.querySelector('.compare-pair-head').addEventListener('click', () => {
+      const wasExpanded = el.classList.contains('expanded');
+      el.classList.toggle('expanded');
+      if (!wasExpanded) {
+        const idx = parseInt(el.dataset.idx);
+        const pair = window._diffPairs[idx];
+        if (!pair) return;
+
+        // 1. iframe lazy load (raw HTML render)
+        el.querySelectorAll('iframe.lazy-iframe').forEach(iframe => {
+          const side = iframe.dataset.side;
+          const data = pair[side];
+          if (data && data.rawHtml) {
+            iframe.srcdoc = wrapForPreview(data.rawHtml, data.url);
+          }
+          iframe.classList.remove('lazy-iframe');
+        });
+
+        // 2. Markdown diff lazy compute
+        const mdA = pair.a.applied?.markdown || '';
+        const mdB = pair.b.applied?.markdown || '';
+        const diff = lineDiff(mdA, mdB);
+        const rendered = renderLineDiff(diff);
+        const lazyMd = el.querySelectorAll('.lazy-md');
+        if (lazyMd[0]) { lazyMd[0].innerHTML = rendered.left; lazyMd[0].classList.remove('lazy-md'); }
+        if (lazyMd[1]) { lazyMd[1].innerHTML = rendered.right; lazyMd[1].classList.remove('lazy-md'); }
+      }
+    });
+  });
+}
+
+// ────── Rule suggestion (自動聚類分析) ──────
+function normalizeForClustering(text) {
+  if (!text || text.trim().length < 3) return null;
+  return text
+    .replace(/\d{4}[-\/.]\d{1,2}[-\/.]\d{1,2}/g, '<DATE>')   // YYYY-MM-DD / YYYY/MM/DD
+    .replace(/\d{1,2}:\d{2}(:\d{2})?/g, '<TIME>')             // HH:MM[:SS]
+    .replace(/\d[\d,]*/g, '<NUM>')                            // 任何數字（含千位逗號）
+    .replace(/[a-f0-9]{32}/gi, '<HASH>')                      // md5 風格 hash
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function suggestNewRules(diffPairs) {
+  const clusters = new Map();
+
+  for (const pair of diffPairs) {
+    const mdA = pair.a.applied?.markdown || '';
+    const mdB = pair.b.applied?.markdown || '';
+    if (!mdA && !mdB) continue;
+
+    const diff = lineDiff(mdA, mdB);
+
+    // 走訪 diff，把 remove / add 行（或它們的 normalized 版本）拿來分群
+    for (let i = 0; i < diff.length; i++) {
+      const ln = diff[i];
+      if (ln.type === 'same') continue;
+
+      // 嘗試配對 remove + 緊接的 add（最常見「同一行 X 變了一些 → Y」)
+      let text;
+      if (ln.type === 'remove' && i + 1 < diff.length && diff[i + 1].type === 'add') {
+        const a = ln.a, b = diff[i + 1].b;
+        const na = normalizeForClustering(a);
+        const nb = normalizeForClustering(b);
+        // 如果 normalized 後一樣 → 兩行其實是同種 pattern（數字變了）
+        if (na && na === nb) {
+          text = a;  // 用 A 當代表
+          addToCluster(clusters, na, [a, b], pair.url);
+          i++;       // 跳過下一個 add
+          continue;
+        }
+        text = a;
+      } else {
+        text = ln.a || ln.b;
+      }
+      const key = normalizeForClustering(text);
+      if (key) addToCluster(clusters, key, [text], pair.url);
+    }
+  }
+
+  return [...clusters.entries()]
+    .map(([pattern, c]) => ({
+      pattern,
+      occurrences: c.occurrences,
+      fileCount: c.pairUrls.size,
+      examples: c.examples,
+    }))
+    // 過濾掉「只在 1 個檔案出現」的，那不算重複 pattern
+    .filter(s => s.fileCount >= 2)
+    .sort((a, b) => b.fileCount - a.fileCount)
+    .slice(0, 10);
+}
+
+function addToCluster(clusters, key, examples, url) {
+  if (!clusters.has(key)) clusters.set(key, { occurrences: 0, pairUrls: new Set(), examples: [] });
+  const c = clusters.get(key);
+  c.occurrences++;
+  c.pairUrls.add(url);
+  for (const ex of examples) {
+    if (c.examples.length < 4 && !c.examples.includes(ex)) c.examples.push(ex);
+  }
+}
+
+function renderSuggestion(s, idx) {
+  const num = String(idx + 1).padStart(2, '0');
+  const examplesHtml = s.examples.map(ex => `<div class="suggestion-example">${escapeHtml(ex)}</div>`).join('');
+  return `
+    <article class="suggestion-card">
+      <div class="suggestion-head">
+        <div class="suggestion-num">${num}</div>
+        <div class="suggestion-meta">
+          <div class="suggestion-count"><strong>${s.fileCount}</strong> 個檔案</div>
+          <div class="suggestion-occ">${s.occurrences} 次出現</div>
+        </div>
+      </div>
+      <div class="suggestion-pattern">${escapeHtml(s.pattern)}</div>
+      <div class="suggestion-examples-label">實際出現的範例：</div>
+      <div class="suggestion-examples">${examplesHtml}</div>
+    </article>
+  `;
+}
+
+// ────── Batch drawer (drill-down detail) ──────
+function openBatchDrawer(jsonData, rowMeta) {
+  const drawer = document.getElementById('batchDrawer');
+  const backdrop = document.getElementById('drawerBackdrop');
+  const title = document.getElementById('drawerTitle');
+  const body = document.getElementById('drawerBody');
+
+  title.textContent = rowMeta.file;
+  const analysis = analyze(jsonData);
+  const applied = applyAllRules(analysis.html, analysis.url);
+  const prodHash = computeProductionHash(applied, jsonData);
+
+  const patternCards = analysis.results.length === 0
+    ? `<div class="no-patterns" style="margin: 0;">這份文件沒有偵測到任何已知的假異動風險 ✓</div>`
+    : analysis.results.map(r => renderPattern(r)).join('');
+
+  body.innerHTML = `
+    <div style="margin-bottom: 24px;">
+      <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--oxblood); margin-bottom: 8px;">URL</div>
+      <div style="font-family: var(--mono); font-size: 12px; word-break: break-all; margin-bottom: 12px;">${escapeHtml(jsonData.url || '')}</div>
+      <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--oxblood); margin-bottom: 8px;">Title</div>
+      <div style="margin-bottom: 12px;">${escapeHtml(jsonData.title || '')}</div>
+      <div class="hash-display"><span class="label">Production md5</span><span class="value">${prodHash}</span></div>
+    </div>
+
+    <div class="section-num">§ Patterns</div>
+    <h3 style="margin: 0 0 16px; font-family: var(--display); font-size: 18px;">偵測到的 pattern (${analysis.results.length})</h3>
+    <div class="patterns-grid">${patternCards}</div>
+  `;
+
+  backdrop.classList.add('open');
+  drawer.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeBatchDrawer() {
+  document.getElementById('drawerBackdrop').classList.remove('open');
+  document.getElementById('batchDrawer').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.getElementById('drawerClose').addEventListener('click', closeBatchDrawer);
+document.getElementById('drawerBackdrop').addEventListener('click', closeBatchDrawer);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeBatchDrawer();
+});
+
+// ────── Export report builders ──────
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(s) {
+  if (s == null) return '';
+  s = String(s);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function buildCsvReport({ countA, countB, sameHash, diffHash, onlyA, onlyB, elapsed }) {
+  const lines = [];
+  // Summary header
+  lines.push('# Compare report (generated ' + new Date().toISOString() + ')');
+  lines.push('# Folder A files,' + countA);
+  lines.push('# Folder B files,' + countB);
+  lines.push('# Same hash,' + sameHash.length);
+  lines.push('# Diff hash,' + diffHash.length);
+  lines.push('# Only in A,' + onlyA.length);
+  lines.push('# Only in B,' + onlyB.length);
+  lines.push('# Elapsed (s),' + elapsed);
+  lines.push('');
+  // DIFF rows
+  lines.push('category,url,fileA,fileB,hashA,hashB,patternTypes,title');
+  for (const p of diffHash) {
+    const types = [...new Set([...p.a.patterns.map(x => x.type), ...p.b.patterns.map(x => x.type)])].sort((a,b)=>a-b).map(t=>'T'+String(t).padStart(2,'0')).join('|');
+    lines.push(['DIFF', p.url, p.a.file, p.b.file, p.a.prodHash || '', p.b.prodHash || '', types, p.a.title || ''].map(csvEscape).join(','));
+  }
+  for (const r of onlyA) {
+    const types = r.patterns.map(x => 'T'+String(x.type).padStart(2,'0')).join('|');
+    lines.push(['A_ONLY', r.url, r.file, '', r.prodHash || '', '', types, r.title || ''].map(csvEscape).join(','));
+  }
+  for (const r of onlyB) {
+    const types = r.patterns.map(x => 'T'+String(x.type).padStart(2,'0')).join('|');
+    lines.push(['B_ONLY', r.url, '', r.file, '', r.prodHash || '', types, r.title || ''].map(csvEscape).join(','));
+  }
+  return lines.join('\n');
+}
+
+function buildMarkdownReport({ countA, countB, sameHash, diffHash, onlyA, onlyB, elapsed }) {
+  const lines = [];
+  lines.push('# Crawler Compare Report');
+  lines.push('');
+  lines.push('產生時間：' + new Date().toLocaleString('zh-TW'));
+  lines.push('');
+  lines.push('## 總覽');
+  lines.push('');
+  lines.push('| 項目 | 數量 |');
+  lines.push('|------|------|');
+  lines.push('| Folder A 檔案數 | ' + countA + ' |');
+  lines.push('| Folder B 檔案數 | ' + countB + ' |');
+  lines.push('| Hash 一致 | ' + sameHash.length + ' |');
+  lines.push('| **Hash 不同** | **' + diffHash.length + '** |');
+  lines.push('| 僅 A 有 (消失) | ' + onlyA.length + ' |');
+  lines.push('| 僅 B 有 (新增) | ' + onlyB.length + ' |');
+  lines.push('| 處理時間 | ' + elapsed + ' s |');
+  lines.push('');
+  if (diffHash.length > 0) {
+    lines.push('## Hash 不同（共同 URL 但內容變了）— ' + diffHash.length + ' 對');
+    lines.push('');
+    lines.push('| # | URL | Folder A | Folder B | Patterns |');
+    lines.push('|---|-----|----------|----------|----------|');
+    diffHash.forEach((p, i) => {
+      const types = [...new Set([...p.a.patterns.map(x => x.type), ...p.b.patterns.map(x => x.type)])].sort((a,b)=>a-b).map(t=>'T'+String(t).padStart(2,'0')).join(' ');
+      lines.push(`| ${i+1} | \`${p.url}\` | ${p.a.file} | ${p.b.file} | ${types || '—'} |`);
+    });
+    lines.push('');
+  }
+  if (onlyA.length > 0) {
+    lines.push('## 僅 Folder A 有（消失）— ' + onlyA.length + ' 個');
+    lines.push('');
+    lines.push('| # | URL | File |');
+    lines.push('|---|-----|------|');
+    onlyA.forEach((r, i) => lines.push(`| ${i+1} | \`${r.url}\` | ${r.file} |`));
+    lines.push('');
+  }
+  if (onlyB.length > 0) {
+    lines.push('## 僅 Folder B 有（新增）— ' + onlyB.length + ' 個');
+    lines.push('');
+    lines.push('| # | URL | File |');
+    lines.push('|---|-----|------|');
+    onlyB.forEach((r, i) => lines.push(`| ${i+1} | \`${r.url}\` | ${r.file} |`));
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+function buildJsonReport(r) {
+  return JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    summary: {
+      countA: r.countA, countB: r.countB,
+      sameHash: r.sameHash.length,
+      diffHash: r.diffHash.length,
+      onlyA: r.onlyA.length, onlyB: r.onlyB.length,
+      elapsedSec: parseFloat(r.elapsed),
+    },
+    diffHash: r.diffHash.map(p => ({
+      url: p.url,
+      fileA: p.a.file, fileB: p.b.file,
+      hashA: p.a.prodHash, hashB: p.b.prodHash,
+      patterns: [...new Set([...p.a.patterns.map(x => x.type), ...p.b.patterns.map(x => x.type)])].sort((a,b)=>a-b),
+      title: p.a.title,
+    })),
+    onlyA: r.onlyA.map(e => ({ url: e.url, file: e.file, hash: e.prodHash, patterns: e.patterns.map(p => p.type), title: e.title })),
+    onlyB: r.onlyB.map(e => ({ url: e.url, file: e.file, hash: e.prodHash, patterns: e.patterns.map(p => p.type), title: e.title })),
+  }, null, 2);
+}
+
+function renderComparePair(pair, idx) {
+  const { url, a, b } = pair;
+  const allTypes = new Set([...a.patterns.map(p => p.type), ...b.patterns.map(p => p.type)]);
+  const pills = [...allTypes].sort((x, y) => x - y).map(t => `<span class="pattern-pill">T${String(t).padStart(2, '0')}</span>`).join('') || '<span style="color: var(--ink-faint); font-family: var(--mono); font-size: 11px;">no pattern hit</span>';
+
+  return `
+    <article class="compare-pair" data-idx="${idx}">
+      <div class="compare-pair-head">
+        <div style="flex: 1; min-width: 0;">
+          <div class="compare-pair-url">${escapeHtml(url)}</div>
+          <div style="font-size: 13px; color: var(--ink-faint); margin-top: 4px;">${escapeHtml(a.title || '')}</div>
+        </div>
+        <div class="compare-pair-types">${pills}</div>
+        <div class="compare-pair-toggle"></div>
+      </div>
+      <div class="compare-pair-details">
+        <!-- File info + hash values -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <div style="padding: 6px 12px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--open); margin-bottom: 6px;">Folder A · ${escapeHtml(a.file)}</div>
+            <div class="hash-display" style="font-size: 11px;"><span class="label">md5</span><span class="value">${a.prodHash || '(N/A)'}</span></div>
+          </div>
+          <div>
+            <div style="padding: 6px 12px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--solved); margin-bottom: 6px;">Folder B · ${escapeHtml(b.file)}</div>
+            <div class="hash-display" style="font-size: 11px;"><span class="label">md5</span><span class="value">${b.prodHash || '(N/A)'}</span></div>
+          </div>
+        </div>
+
+        <!-- Markdown line-diff -->
+        <div style="margin-top: 16px;">
+          <div style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px;">Markdown 行級 diff（hash 真正比的東西）</div>
+          <div class="preview-grid">
+            <div class="preview-pane">
+              <div class="preview-head before-head">Folder A markdown</div>
+              <div class="md-pane lazy-md" data-side="a"></div>
+            </div>
+            <div class="preview-pane">
+              <div class="preview-head after-head">Folder B markdown</div>
+              <div class="md-pane lazy-md" data-side="b"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HTML rendered preview (raw) -->
+        <div style="margin-top: 16px;">
+          <div style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px;">原始 HTML 渲染（看視覺差異）</div>
+          <div class="preview-grid">
+            <div class="preview-pane">
+              <div class="preview-head before-head">Folder A</div>
+              <iframe class="preview-frame lazy-iframe" style="height: 400px;" sandbox data-side="a"></iframe>
+            </div>
+            <div class="preview-pane">
+              <div class="preview-head after-head">Folder B</div>
+              <iframe class="preview-frame lazy-iframe" style="height: 400px;" sandbox data-side="b"></iframe>
+            </div>
+          </div>
+        </div>
+
+        <p style="font-size: 12px; color: var(--ink-faint); margin-top: 8px;">
+          兩邊都已套站點規則但 md5 不同 → 內容本體真的有變動，或還有未涵蓋的 noise pattern
+        </p>
+      </div>
+    </article>
+  `;
+}
+
+// Stash pairs globally for lazy iframe srcdoc loading
+window._diffPairs = [];
+
+function renderOnlyOneRow(r) {
+  const pills = r.patterns.length === 0
+    ? '<span style="color: var(--ink-faint); font-family: var(--mono); font-size: 11px;">—</span>'
+    : r.patterns.map(p => `<span class="pattern-pill">T${String(p.type).padStart(2, '0')}</span>`).join('');
+  return `
+    <div class="batch-row ${r.patterns.length === 0 ? 'clean' : ''}">
+      <div class="types">${r.patterns.length === 0 ? '—' : r.patterns.length}</div>
+      <div>
+        <div class="filename">${escapeHtml(r.file)}</div>
+        <div style="font-size: 12px; color: var(--ink-faint); margin-top: 2px;">${escapeHtml((r.url || '').slice(0, 90))}${(r.url||'').length > 90 ? '…' : ''}</div>
+      </div>
+      <div class="pattern-pills">${pills}</div>
+    </div>
+  `;
+}
+
+updateCompareReady();
+</script>
+
+</body>
+</html>

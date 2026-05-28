@@ -23,6 +23,11 @@
 ### `tools/crawler-false-change-patterns.html`
 10 種已知 noise pattern 的速查表（Type 1 ~ 10）。
 
+### `tools/inspector-bookmarklet.js` + `tools/install-inspector.html`
+**書籤版 inspector** — 逛任何網站時點一下書籤，右上角浮出檢測結果列出該頁有哪些 noise pattern。可以「下載成 JSON」拖到桌面分析器繼續分析。
+
+安裝：開 `tools/install-inspector.html`，把「⚓ Noise Inspector」按鈕拖到瀏覽器書籤列。
+
 ### `analyze-document.js`
 CLI 版分析器，可分析單檔或整個資料夾：
 

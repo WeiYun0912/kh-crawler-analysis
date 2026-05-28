@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crawler Noise Inspector · 安裝書籤</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500&family=Noto+Serif+TC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #F4EFE4;
+  --paper-warm: #EFE8D9;
+  --ink: #1B1612;
+  --ink-quiet: #4A413A;
+  --ink-faint: #8B7E70;
+  --rule: #C9BFAE;
+  --rule-soft: #E0D6C2;
+  --oxblood: #7A1818;
+  --oxblood-soft: rgba(122, 24, 24, 0.08);
+  --solved: #2C5F2D;
+  --solved-bg: rgba(44, 95, 45, 0.08);
+  --display: 'Fraunces', 'Noto Serif TC', serif;
+  --body: 'Newsreader', 'Noto Serif TC', serif;
+  --ui: 'Noto Sans TC', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.top-nav {
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 48px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.top-nav .brand { color: var(--oxblood); font-weight: 600; }
+.top-nav .brand::before { content: '◾'; margin-right: 8px; }
+.top-nav nav { display: flex; gap: 28px; }
+.top-nav a {
+  color: var(--ink-faint);
+  text-decoration: none;
+  position: relative;
+  padding: 4px 0;
+}
+.top-nav a:hover { color: var(--ink); }
+.top-nav a.current { color: var(--oxblood); }
+.top-nav a.current::after {
+  content: '';
+  position: absolute;
+  bottom: -16px; left: 0; right: 0;
+  height: 2px;
+  background: var(--oxblood);
+}
+
+.layout {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 64px 48px;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--oxblood);
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: clamp(36px, 5.5vw, 56px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 0 0 20px;
+  font-variation-settings: "opsz" 144;
+}
+
+.lede {
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink-quiet);
+  margin: 0 0 40px;
+}
+
+.install-box {
+  background: var(--paper-warm);
+  border: 2px dashed var(--oxblood);
+  border-radius: 4px;
+  padding: 36px 32px;
+  text-align: center;
+  margin: 32px 0;
+}
+.install-box .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--oxblood);
+  margin-bottom: 16px;
+}
+.bookmarklet-btn {
+  display: inline-block;
+  background: var(--oxblood);
+  color: var(--paper);
+  font-family: var(--ui);
+  font-weight: 500;
+  font-size: 16px;
+  padding: 14px 32px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: all 0.15s;
+  border: 1px solid var(--oxblood);
+  cursor: grab;
+  user-select: none;
+}
+.bookmarklet-btn:hover {
+  background: #5C1212;
+  border-color: #5C1212;
+}
+.bookmarklet-btn:active { cursor: grabbing; }
+.install-box .hint {
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--ink-quiet);
+}
+
+.section-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--oxblood);
+  text-transform: uppercase;
+  margin: 56px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.section-num::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+h2 {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0 0 20px;
+  font-variation-settings: "opsz" 48;
+}
+
+ol {
+  padding-left: 24px;
+}
+li { margin-bottom: 10px; }
+
+code, .mono {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: var(--oxblood-soft);
+  color: var(--oxblood);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+pre {
+  background: #1F1B17;
+  color: #E8DEC8;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 16px 20px;
+  border-radius: 3px;
+  overflow-x: auto;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.versions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+@media (max-width: 768px) {
+  .versions { grid-template-columns: 1fr; }
+}
+
+.version-card {
+  background: var(--paper-warm);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 20px 22px;
+}
+.version-card h3 {
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 500;
+}
+.version-card p {
+  font-size: 14px;
+  color: var(--ink-quiet);
+  margin: 0 0 12px;
+}
+.tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+  margin-right: 6px;
+}
+.tag.green { background: var(--solved-bg); color: var(--solved); }
+.tag.gray { background: rgba(0,0,0,0.05); color: var(--ink-quiet); }
+</style>
+</head>
+<body>
+
+<div class="top-nav">
+  <div class="brand">Crawler Hash Tools</div>
+  <nav>
+    <a href="./crawler-false-change-patterns.html">Patterns Catalog</a>
+    <a href="./crawler-document-analyzer.html">Document Analyzer</a>
+    <a href="./install-inspector.html" class="current">Inspector Bookmarklet</a>
+  </nav>
+</div>
+
+<div class="layout">
+
+  <div class="eyebrow">Tool · Bookmarklet Installer</div>
+  <h1>Crawler Noise Inspector</h1>
+  <p class="lede">
+    把這個書籤加進瀏覽器，逛任何網頁時點一下，<strong>右上角立刻浮出視窗</strong>顯示這頁有什麼 noise pattern。
+    不用裝 extension、不用下載檔案再丟到分析器 — 直接在瀏覽網站時就知道結果。
+  </p>
+
+  <div class="install-box">
+    <div class="label">↓ 把下面按鈕拖到瀏覽器書籤列 ↓</div>
+    <a id="bookmarkletLink" class="bookmarklet-btn" href="#">⚓ Noise Inspector</a>
+    <div class="hint">
+      或：右鍵 → 加到我的最愛 / 加入書籤<br>
+      或：複製按鈕的連結（右鍵 → 複製連結）→ 手動建立書籤
+    </div>
+  </div>
+
+  <div class="section-num">§ 01 · 安裝步驟</div>
+  <h2>怎麼裝</h2>
+  <ol>
+    <li>確認瀏覽器顯示書籤列（Chrome: <code>Ctrl + Shift + B</code> 切換）</li>
+    <li>把上面的「⚓ Noise Inspector」按鈕<strong>用滑鼠拖到書籤列</strong></li>
+    <li>完成！</li>
+  </ol>
+
+  <div class="section-num">§ 02 · 怎麼用</div>
+  <h2>怎麼用</h2>
+  <ol>
+    <li>逛任何網站，例如 <code>https://coia.kcg.gov.tw/web_tw/index.php</code></li>
+    <li>點書籤列上的「⚓ Noise Inspector」</li>
+    <li>右上角浮出檢測結果，列出偵測到的 noise pattern（T01 ~ T10）</li>
+    <li>需要的話按「<strong>下載 .json</strong>」→ 拿到一個檔，拖進 <code>crawler-document-analyzer.html</code> 做深度分析</li>
+    <li>或按「<strong>複製為 JSON</strong>」直接放剪貼簿</li>
+  </ol>
+
+  <div class="section-num">§ 03 · 兩個版本</div>
+  <h2>選一個版本裝</h2>
+  <div class="versions">
+    <div class="version-card">
+      <h3>Loader 版 <span class="tag green">推薦</span></h3>
+      <p>從 GitHub 經由 jsdelivr CDN 載入。<strong>規則更新會自動同步</strong>（commit 到 main → 隔天所有用戶自動拿到新版）。</p>
+      <pre id="loaderCode"></pre>
+    </div>
+    <div class="version-card">
+      <h3>Inline 版 <span class="tag gray">離線可用</span></h3>
+      <p>整段程式碼塞進 URL。不需要外部依賴，<strong>離線/內網也能用</strong>。但更新規則時要手動換書籤。</p>
+      <p style="font-size: 12px;">URL 太長無法直接顯示，請用上方按鈕拖曳，或下方「複製 Inline 版 URL」。</p>
+      <button id="copyInlineBtn" style="font-family:var(--mono);font-size:11px;padding:6px 14px;border:1px solid var(--rule);background:var(--paper);color:var(--ink-quiet);border-radius:2px;cursor:pointer;">複製 Inline 版 URL</button>
+    </div>
+  </div>
+
+  <div class="section-num">§ 04 · 偵測哪些 pattern</div>
+  <h2>偵測哪些 noise</h2>
+  <ol>
+    <li><strong>Type 1</strong>: URL 含 <code>page</code> 參數</li>
+    <li><strong>Type 2</strong>: 頁面含「回 XX 列表」連結</li>
+    <li><strong>Type 3</strong>: URL 有重複 query key（爬蟲組 URL bug）</li>
+    <li><strong>Type 4</strong>: URL 含 <code>appId2</code></li>
+    <li><strong>Type 5/6</strong>: 表格 thead 含「瀏覽/點閱/下載/觀看」</li>
+    <li><strong>Type 9</strong>: Footer「您是第 N 位瀏覽者」</li>
+    <li><strong>Type 10</strong>: Footer「更新日期 YYYY-MM-DD」</li>
+  </ol>
+  <p>偵測邏輯跟桌面分析器同步，源碼：<a href="./inspector-bookmarklet.js"><code>tools/inspector-bookmarklet.js</code></a></p>
+
+</div>
+
+<script>
+// ── Loader 版 bookmarklet ──
+// 短短一行，從 jsdelivr CDN 載入主程式。更新方便、URL 短
+const LOADER_BOOKMARKLET = "javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/WeiYun0912/kh-crawler-analysis@main/tools/inspector-bookmarklet.js?t='+Date.now();document.body.appendChild(s);})();";
+
+// ── Inline 版 bookmarklet ──
+// 整段程式碼塞進 URL，先用 fetch 抓本地檔案再 URL-encode
+async function buildInlineBookmarklet() {
+  try {
+    const res = await fetch('./inspector-bookmarklet.js');
+    if (!res.ok) throw new Error('讀取失敗');
+    const code = await res.text();
+    // 簡單 minify：移除多行注釋、單行注釋、額外換行
+    const min = code
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/[^\n]*$/gm, '')
+      .replace(/\n\s*\n/g, '\n')
+      .trim();
+    return 'javascript:' + encodeURIComponent(min);
+  } catch (e) {
+    return null;
+  }
+}
+
+// 設定按鈕的 href 為 loader 版
+const btn = document.getElementById('bookmarkletLink');
+btn.href = LOADER_BOOKMARKLET;
+document.getElementById('loaderCode').textContent = LOADER_BOOKMARKLET;
+
+// 複製 inline 版 URL
+document.getElementById('copyInlineBtn').addEventListener('click', async () => {
+  const url = await buildInlineBookmarklet();
+  if (!url) {
+    alert('讀取 inline 版失敗 — 請從 GitHub 直接複製 tools/inspector-bookmarklet.js 內容');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    const btnEl = document.getElementById('copyInlineBtn');
+    btnEl.textContent = '✓ 已複製，貼到書籤的 URL 欄';
+    setTimeout(() => { btnEl.textContent = '複製 Inline 版 URL'; }, 2500);
+  } catch (e) {
+    alert('複製失敗：' + e.message);
+  }
+});
+</script>
+
+</body>
+</html>

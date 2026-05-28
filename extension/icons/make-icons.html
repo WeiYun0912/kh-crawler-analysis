@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Make Icons · Crawler Noise Inspector</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 24px; color: #1B1612; }
+  h1 { font-family: serif; }
+  p { line-height: 1.6; color: #5C5249; }
+  .grid { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+  .item { text-align: center; }
+  .item canvas { border: 1px solid #C9BFAE; image-rendering: pixelated; background: #fff; }
+  .item button {
+    display: block; margin-top: 8px;
+    background: #7A1818; color: #F4EFE4; border: none;
+    font-family: 'Menlo', monospace; font-size: 11px;
+    padding: 8px 14px; border-radius: 3px; cursor: pointer;
+  }
+  .item button:hover { background: #5C1212; }
+  code { background: #f0e8d8; padding: 1px 6px; border-radius: 2px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>產生 Extension 圖示</h1>
+<p>下方有 3 個尺寸的圖示。按下「下載」存到 <code>extension/icons/</code> 資料夾就完成。</p>
+
+<div class="grid" id="grid"></div>
+
+<p style="font-size: 13px; color: #8B7E70;">設計：暗紅底 + 字體「N」（noise）+ 右上角放大鏡點。可自由換成自己的圖。</p>
+
+<script>
+const SIZES = [16, 48, 128];
+const grid = document.getElementById('grid');
+
+function drawIcon(size) {
+  const cv = document.createElement('canvas');
+  cv.width = size;
+  cv.height = size;
+  const ctx = cv.getContext('2d');
+
+  // 背景圓角矩形
+  const radius = size * 0.18;
+  ctx.fillStyle = '#7A1818';
+  roundRect(ctx, 0, 0, size, size, radius);
+  ctx.fill();
+
+  // 字「N」（noise）
+  ctx.fillStyle = '#F4EFE4';
+  ctx.font = 'bold ' + Math.floor(size * 0.65) + 'px "Times New Roman", serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('N', size / 2, size * 0.54);
+
+  // 右下角小放大鏡圓點
+  const dotR = size * 0.13;
+  const dotCx = size * 0.78;
+  const dotCy = size * 0.78;
+  ctx.fillStyle = '#F4EFE4';
+  ctx.beginPath();
+  ctx.arc(dotCx, dotCy, dotR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#7A1818';
+  ctx.beginPath();
+  ctx.arc(dotCx, dotCy, dotR * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+
+  return cv;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+for (const size of SIZES) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  const cv = drawIcon(size);
+  // 大圖示放大顯示讓人看得到
+  cv.style.width = Math.max(size, 96) + 'px';
+  cv.style.height = Math.max(size, 96) + 'px';
+  const label = document.createElement('div');
+  label.textContent = size + '×' + size;
+  label.style.cssText = 'font-family:monospace;font-size:11px;color:#5C5249;margin-top:4px;';
+  const btn = document.createElement('button');
+  btn.textContent = '下載 icon' + size + '.png';
+  btn.onclick = () => {
+    cv.toBlob((blob) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'icon' + size + '.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }, 'image/png');
+  };
+  div.appendChild(cv);
+  div.appendChild(label);
+  div.appendChild(btn);
+  grid.appendChild(div);
+}
+</script>
+
+</body>
+</html>

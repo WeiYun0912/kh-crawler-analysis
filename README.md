@@ -28,6 +28,11 @@
 
 安裝：開 `tools/install-inspector.html`，把「⚓ Noise Inspector」按鈕拖到瀏覽器書籤列。
 
+### `extension/`
+**Chrome Extension 版** — 跟 bookmarklet 同樣的偵測邏輯，但裝在工具列上一鍵掃描。
+
+安裝步驟：見 `extension/README.md`。簡單 4 步：產圖示 → 開 chrome://extensions → 開發人員模式 → 載入未封裝項目（選 `extension/` 資料夾）。
+
 ### `analyze-document.js`
 CLI 版分析器，可分析單檔或整個資料夾：
 

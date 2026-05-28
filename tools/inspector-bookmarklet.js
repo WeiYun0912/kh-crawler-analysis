@@ -281,28 +281,18 @@
         ].join('');
     }).join('');
 
-    // Hash preview section
-    const hashHtml = [
-        '<div id="__ci_hash_section" style="padding:14px 18px;border-bottom:1px solid #E0D6C2;background:rgba(122,24,24,0.03);">',
-          '<div style="font-family:\'Menlo\',\'Consolas\',monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#7A1818;font-weight:600;margin-bottom:8px;">Production Pipeline Preview</div>',
-          '<div id="__ci_hash_status" style="font-size:12px;color:#5C5249;">⏳ 載入 turndown + md5 中…</div>',
-        '</div>'
-    ].join('');
-
     // Actions
     const actionsHtml = [
         '<div style="padding:12px 18px;border-top:1px solid #C9BFAE;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:#EFE8D9;flex-shrink:0;">',
           '<button id="__ci_copy__" style="font-family:\'Menlo\',\'Consolas\',monospace;font-size:11px;padding:7px 14px;background:#7A1818;color:#F4EFE4;border:none;cursor:pointer;border-radius:3px;font-weight:600;">複製為 JSON</button>',
           '<button id="__ci_download__" style="font-family:\'Menlo\',\'Consolas\',monospace;font-size:11px;padding:7px 14px;background:#F4EFE4;color:#1B1612;border:1px solid #C9BFAE;cursor:pointer;border-radius:3px;">下載 .json</button>',
-          '<span style="flex:1;"></span>',
-          '<a href="https://github.com/WeiYun0912/kh-crawler-analysis" target="_blank" rel="noopener" style="font-family:\'Menlo\',\'Consolas\',monospace;font-size:10px;color:#5C5249;text-decoration:none;">查看 pattern 完整文件 ↗</a>',
         '</div>'
     ].join('');
 
     panel.innerHTML = [
         headerHtml,
         summaryHtml,
-        '<div style="overflow-y:auto;flex:1;min-height:0;">' + findingsHtml + hashHtml + '</div>',
+        '<div style="overflow-y:auto;flex:1;min-height:0;">' + findingsHtml + '</div>',
         actionsHtml
     ].join('');
 
@@ -311,7 +301,10 @@
     // ──────────────────────────────────────────────
     //  Event handlers
     // ──────────────────────────────────────────────
-    document.getElementById('__ci_close__').onclick = () => panel.remove();
+    document.getElementById('__ci_close__').onclick = () => {
+        clearHighlight();
+        panel.remove();
+    };
 
     document.getElementById('__ci_copy__').onclick = async () => {
         const data = { url, title, html };
@@ -350,118 +343,137 @@
         };
     });
 
-    // ── 標亮原網頁元素 ──
+    // ──────────────────────────────────────────────
+    //  標亮原網頁元素 — 框出 + 標籤 + toggle
+    // ──────────────────────────────────────────────
+    let currentHighlight = null;  // { target, origStyle, labelEl, currentBtn }
+
+    function clearHighlight() {
+        if (!currentHighlight) return;
+        const { target, origStyle, labelEl, currentBtn } = currentHighlight;
+        Object.assign(target.style, origStyle);
+        if (labelEl && labelEl.parentNode) labelEl.parentNode.removeChild(labelEl);
+        if (currentBtn) currentBtn.textContent = '👁';
+        panel.style.opacity = '1';
+        currentHighlight = null;
+    }
+
+    function highlightElement(target, finding, btn) {
+        // 已標亮的 → 切掉
+        if (currentHighlight && currentHighlight.target === target) {
+            clearHighlight();
+            return;
+        }
+        // 換一個 finding → 清掉上一個
+        clearHighlight();
+
+        const info = PATTERN_INFO[finding.type] || { name: 'Type ' + finding.type };
+        const sev = severityColors[finding.severity] || severityColors.mid;
+
+        // 滾動到位
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // 把浮窗淡掉一下（用戶看標亮位置）
+        panel.style.opacity = '0.35';
+
+        // 套用厚紅框 + 紅色光暈
+        const origStyle = {
+            outline: target.style.outline,
+            outlineOffset: target.style.outlineOffset,
+            boxShadow: target.style.boxShadow,
+            transition: target.style.transition,
+            position: target.style.position,
+            zIndex: target.style.zIndex,
+            backgroundColor: target.style.backgroundColor,
+        };
+        target.style.transition = 'outline 0.2s, outline-offset 0.2s, box-shadow 0.2s, background-color 0.2s';
+        target.style.outline = '4px solid ' + sev.bg;
+        target.style.outlineOffset = '3px';
+        target.style.boxShadow = '0 0 0 10px rgba(180, 83, 9, 0.18), 0 0 40px rgba(180, 83, 9, 0.35)';
+        target.style.backgroundColor = 'rgba(180, 83, 9, 0.08)';
+
+        // 加上標籤 callout（在元素上方或下方）
+        const labelEl = document.createElement('div');
+        labelEl.id = '__ci_highlight_label__';
+        const rect = target.getBoundingClientRect();
+        const labelText = 'T' + String(finding.type).padStart(2, '0') + ' · ' + info.name + ' — 這裡有問題';
+        labelEl.style.cssText = [
+            'position:absolute',
+            'z-index:2147483647',
+            'background:' + sev.bg,
+            'color:#F4EFE4',
+            "font-family:-apple-system,'Segoe UI','Noto Sans TC',sans-serif",
+            'font-size:13px',
+            'font-weight:600',
+            'padding:6px 14px',
+            'border-radius:4px',
+            'box-shadow:0 4px 16px rgba(0,0,0,0.35)',
+            'white-space:nowrap',
+            'max-width:90vw',
+            'overflow:hidden',
+            'text-overflow:ellipsis',
+            'pointer-events:none',
+        ].join(';');
+        labelEl.textContent = labelText;
+        // 三角箭頭
+        const arrow = document.createElement('div');
+        arrow.style.cssText = [
+            'position:absolute',
+            'bottom:-6px',
+            'left:24px',
+            'width:0', 'height:0',
+            'border-left:7px solid transparent',
+            'border-right:7px solid transparent',
+            'border-top:7px solid ' + sev.bg,
+        ].join(';');
+        labelEl.appendChild(arrow);
+        document.body.appendChild(labelEl);
+
+        // 算 label 位置（在元素上方；若空間不夠就在下方）
+        const labelRect = labelEl.getBoundingClientRect();
+        const elTop = rect.top + window.scrollY;
+        const placeAbove = rect.top >= labelRect.height + 16;
+        if (placeAbove) {
+            labelEl.style.top = (elTop - labelRect.height - 10) + 'px';
+            labelEl.style.left = (rect.left + window.scrollX + 8) + 'px';
+        } else {
+            // 改放下方，且翻轉箭頭
+            labelEl.style.top = (elTop + rect.height + 10) + 'px';
+            labelEl.style.left = (rect.left + window.scrollX + 8) + 'px';
+            arrow.style.cssText = [
+                'position:absolute',
+                'top:-6px', 'left:24px',
+                'width:0', 'height:0',
+                'border-left:7px solid transparent',
+                'border-right:7px solid transparent',
+                'border-bottom:7px solid ' + sev.bg,
+            ].join(';');
+        }
+
+        // 浮窗 1.5 秒後恢復不透明（用戶能繼續操作浮窗）
+        setTimeout(() => { panel.style.opacity = '1'; }, 1500);
+
+        currentHighlight = { target, origStyle, labelEl, currentBtn: btn };
+        btn.textContent = '✕';  // 點同一個會切掉
+    }
+
     panel.querySelectorAll('.__ci_highlight').forEach(btn => {
         btn.onclick = () => {
             const idx = parseInt(btn.dataset.idx);
-            const target = findings[idx] && findings[idx].domTarget;
-            if (!target) return;
-            // 先暫時隱藏浮窗（不要擋住）
-            const origZ = panel.style.zIndex;
-            panel.style.opacity = '0.3';
-            // 滾動 + 高亮
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            const origOutline = target.style.outline;
-            const origOutlineOffset = target.style.outlineOffset;
-            const origTransition = target.style.transition;
-            target.style.transition = 'outline 0.2s, outline-offset 0.2s, box-shadow 0.2s';
-            target.style.outline = '3px solid #B45309';
-            target.style.outlineOffset = '2px';
-            target.style.boxShadow = '0 0 0 4px rgba(180, 83, 9, 0.25)';
-            setTimeout(() => {
-                target.style.outline = origOutline;
-                target.style.outlineOffset = origOutlineOffset;
-                target.style.boxShadow = '';
-                target.style.transition = origTransition;
-                panel.style.opacity = '1';
-            }, 3500);
+            const f = findings[idx];
+            if (!f || !f.domTarget) return;
+            highlightElement(f.domTarget, f, btn);
         };
     });
 
-    // ──────────────────────────────────────────────
-    //  Hash computation (async, load turndown + md5)
-    // ──────────────────────────────────────────────
-    function loadScript(src) {
-        return new Promise((resolve, reject) => {
-            if (document.querySelector('script[data-ci-lib="' + src + '"]')) return resolve();
-            const s = document.createElement('script');
-            s.src = src;
-            s.dataset.ciLib = src;
-            s.onload = resolve;
-            s.onerror = (e) => reject(new Error('Load failed: ' + src));
-            document.head.appendChild(s);
-        });
-    }
-
-    const INLINE_COUNTER_REGEX = /(?:總|目前|累積|累計|統計)?(?:點閱|點閱率|點閱數|點閱次|點閱人次|點閱人數|觀看|觀看率|觀看次|觀看數|觀看人數|觀看人次|瀏覽|瀏覽率|瀏覽次|瀏覽人次|瀏覽人數|查看|查看率|查看次|查看人次|查看人數|點擊|點擊率|點擊次|點擊人次|點擊人數|閱讀|閱讀率|閱讀次|閱讀人次|閱讀人數|累積|累積率|累積次|累積人次|累積人數|到站|到站率|到站次|到站人次|到站人數|到訪|到訪人數|到訪人次|到訪次|訪問|訪問人次|訪問人數|訪問數)(?:[：:－\-＞>]\s*|\s*)\d+/g;
-    const INLINE_VISITOR_REGEX = /您是第[\s\S]{0,30}?\d[\d,]*[\s\S]{0,15}?位\s*(?:瀏覽者|訪客|讀者|看官|訪問者|來賓)?/g;
-    const INLINE_FOOTER_DATE_REGEX = /(?:更新日期|最後更新|最近更新|今日日期|查詢日期|系統日期|目前時間)[\s\S]{0,30}?\d{4}[\s\S]{0,5}?[-\/.]\s*\d{1,2}\s*[-\/.]\s*\d{1,2}(?:[\s\S]{0,15}?\d{1,2}:\d{2}(?::\d{2})?)?(?:\s*<\/[a-zA-Z]+>)*/g;
-
-    // 簡化版 production cleanup（mirror filterAndConvertHtml 的 cheerio 部分）
-    function cleanupForHash(doc) {
-        doc.querySelectorAll('[onclick], [onmouseover], [onmousedown]').forEach(el => el.remove());
-        doc.querySelectorAll('a[href^="javascript:"], script, style, a[href="#"], meta, link, noscript, img, .advertisement, .footer, div.toplink.nosnippet, div.advanced_search, a[onmousedown]').forEach(el => el.remove());
-        doc.querySelectorAll('iframe').forEach(iframe => {
-            const src = iframe.getAttribute('src');
-            if (src && /^https:\/\/www\.google\.com\/maps\/embed/.test(src)) { iframe.remove(); return; }
-            if (src) {
-                const p = doc.createElement('p');
-                p.textContent = src;
-                iframe.replaceWith(p);
-            }
-        });
-    }
-
-    async function computeHashPreview() {
-        const statusEl = document.getElementById('__ci_hash_status');
-        try {
-            await loadScript('https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js');
-            await loadScript('https://cdn.jsdelivr.net/npm/blueimp-md5@2.19.0/js/md5.min.js');
-
-            const TS = window.TurndownService;
-            const _md5 = window.md5;
-            if (!TS || !_md5) throw new Error('library 載入後找不到 TurndownService / md5');
-
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            cleanupForHash(doc);
-            let filteredHtml = doc.body.innerHTML;
-            filteredHtml = filteredHtml.replace(/\n{2,}/g, '\n')
-                .replace(INLINE_COUNTER_REGEX, '')
-                .replace(INLINE_VISITOR_REGEX, '')
-                .replace(INLINE_FOOTER_DATE_REGEX, '');
-            const td = new TS();
-            let markdown = td.turndown(filteredHtml);
-            markdown = markdown.trim().replace(/(\r?\n\s*){2,}/g, '\n').replace(/ {3,}/g, ' ');
-
-            // production hash 公式：md5(markdown + title + JSON(sortedMeta) + version)
-            // 我們沒有 crawler 的 meta_data，用空 {} 當預估
-            const metaJson = '{}';
-            const hashInput = markdown + (title || '') + metaJson + 'v2.3';
-            const hashHex = _md5(hashInput);
-
-            statusEl.innerHTML = [
-                '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12px;">',
-                  '<div style="color:#8B7E70;font-family:\'Menlo\',\'Consolas\',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;padding-top:2px;">Markdown size</div>',
-                  '<div style="color:#1B1612;font-family:\'Menlo\',\'Consolas\',monospace;">' + markdown.length.toLocaleString() + ' chars · ' + markdown.split('\n').length + ' lines</div>',
-                  '<div style="color:#8B7E70;font-family:\'Menlo\',\'Consolas\',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;padding-top:2px;">預估 md5</div>',
-                  '<div style="font-family:\'Menlo\',\'Consolas\',monospace;color:#7A1818;font-weight:600;word-break:break-all;">' + hashHex + ' <button id="__ci_copyhash" style="font-family:\'Menlo\',monospace;font-size:9px;letter-spacing:0.08em;padding:2px 8px;border:1px solid #C9BFAE;background:#F4EFE4;color:#5C5249;cursor:pointer;border-radius:2px;margin-left:6px;">複製</button></div>',
-                '</div>',
-                '<div style="font-size:11px;color:#8B7E70;margin-top:8px;">⚠ 此 hash 假設 meta_data 為空 {}。Production 實際 hash 還會加上 crawler 抽出的 meta（如 category、updated_at），所以可能跟此值不同。但能驗證「清洗後的 markdown 是否乾淨」。</div>',
-            ].join('');
-
-            document.getElementById('__ci_copyhash').onclick = async () => {
-                try {
-                    await navigator.clipboard.writeText(hashHex);
-                    document.getElementById('__ci_copyhash').textContent = '✓';
-                    setTimeout(() => {
-                        const b = document.getElementById('__ci_copyhash');
-                        if (b) b.textContent = '複製';
-                    }, 1200);
-                } catch (e) {}
-            };
-        } catch (e) {
-            statusEl.innerHTML = '<span style="color:#B45309;">⚠ 無法載入 turndown/md5 library（可能該站點 CSP 擋掉）。<br><span style="font-size:11px;color:#5C5249;">改用「下載 .json」拖到桌面分析器算 hash。</span></span>';
+    // 按 Esc 取消標亮
+    document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape' && currentHighlight) {
+            clearHighlight();
         }
-    }
-    computeHashPreview();
+        if (e.key === 'Escape' && !document.getElementById('__crawler_inspector__')) {
+            document.removeEventListener('keydown', escHandler);
+        }
+    });
+
 })();

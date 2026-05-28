@@ -594,6 +594,51 @@ code.inline {
 }
 .hash-display button:hover { color: var(--oxblood); }
 .hash-display button.copied { color: var(--solved); }
+
+/* DB hash verification */
+.hash-verify {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hash-verify .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.hash-verify input {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+  flex: 1;
+  min-width: 320px;
+}
+.hash-verify input:focus { outline: none; border-color: var(--oxblood); }
+.hash-verify .verify-result {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 2px;
+}
+.hash-verify .verify-result.match {
+  color: var(--solved);
+  background: var(--solved-bg);
+}
+.hash-verify .verify-result.mismatch {
+  color: var(--open);
+  background: var(--open-bg);
+}
+.hash-verify .verify-result.warn {
+  color: var(--observing);
+  background: var(--observing-bg);
+}
 @media (max-width: 768px) {
   .preview-frame { height: 400px; }
 }
@@ -917,6 +962,74 @@ code.inline {
 }
 .suggestion-example {
   word-break: break-all;
+}
+.suggestion-actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--rule);
+}
+.suggestion-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.suggestion-action-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.suggestion-snippet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.suggestion-code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--oxblood-soft);
+  color: var(--oxblood);
+  padding: 6px 10px;
+  border-radius: 2px;
+  word-break: break-all;
+  font-weight: 500;
+  flex: 1;
+  min-width: 280px;
+}
+.suggestion-block {
+  margin: 0;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  border-radius: 3px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.suggestion-copy {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  padding: 5px 12px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-quiet);
+  cursor: pointer;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.suggestion-copy:hover {
+  border-color: var(--oxblood);
+  color: var(--oxblood);
+}
+.suggestion-copy.copied {
+  border-color: var(--solved);
+  color: var(--solved);
 }
 
 /* Batch drill-down drawer */
@@ -1363,6 +1476,34 @@ const PATTERN_DEFS = {
 const NOISE_KEYWORDS = ['瀏覽', '點閱', '下載', '次數', '觀看', '查看', '閱讀'];
 
 // ════════════════════════════════════════════════════════════════════
+// Site-aware rule application (鏡像 production rules/site-rules.js)
+// 維護：當 rules/site-rules.js 改動時，請同步更新這份 config
+// ════════════════════════════════════════════════════════════════════
+const SITE_RULES_CONFIG = {
+  // siteId → 啟用的規則名稱陣列
+  coia: ['stripAllAHref', 'clearTableColumnsByHeader'],
+  // busker / 其他站點目前無 site rules（只受 production 通用 inline regex 影響）
+};
+
+// 從 URL 推斷 siteId（hostname 第一段，例如 coia.kcg.gov.tw → coia）
+function inferSiteId(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const host = u.hostname;  // 例 coia.kcg.gov.tw
+    return host.split('.')[0];  // → coia
+  } catch (e) {
+    return null;
+  }
+}
+
+// 該 siteId 啟用哪些 rule（給 applySiteRules 使用）
+function getEnabledRules(siteId) {
+  if (!siteId) return [];
+  return SITE_RULES_CONFIG[siteId] || [];
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Detection
 // ════════════════════════════════════════════════════════════════════
 function analyze(jsonData) {
@@ -1634,27 +1775,35 @@ function docToFilteredHtml(doc) {
   return applyInlineRegexes(doc.body.innerHTML);
 }
 
-// 站點規則應用
-function applySiteRules(doc) {
+// 站點規則應用（只套用該 siteId 在 SITE_RULES_CONFIG 啟用的規則）
+function applySiteRules(doc, siteId) {
   let hrefRemoved = 0;
   let cellsCleared = 0;
+  const enabled = getEnabledRules(siteId);
+
   // stripAllAHref
-  doc.querySelectorAll('a[href]').forEach(a => { a.removeAttribute('href'); hrefRemoved++; });
+  if (enabled.includes('stripAllAHref')) {
+    doc.querySelectorAll('a[href]').forEach(a => { a.removeAttribute('href'); hrefRemoved++; });
+  }
+
   // clearTableColumnsByHeader
-  doc.querySelectorAll('table').forEach(table => {
-    const headers = [...table.querySelectorAll('thead th')];
-    if (headers.length === 0) return;
-    const colIdx = headers.findIndex(th => {
-      const t = (th.textContent || '').trim();
-      return NOISE_KEYWORDS.some(k => t.includes(k));
+  if (enabled.includes('clearTableColumnsByHeader')) {
+    doc.querySelectorAll('table').forEach(table => {
+      const headers = [...table.querySelectorAll('thead th')];
+      if (headers.length === 0) return;
+      const colIdx = headers.findIndex(th => {
+        const t = (th.textContent || '').trim();
+        return NOISE_KEYWORDS.some(k => t.includes(k));
+      });
+      if (colIdx === -1) return;
+      table.querySelectorAll('tbody tr').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        if (tds[colIdx]) { tds[colIdx].textContent = ''; cellsCleared++; }
+      });
     });
-    if (colIdx === -1) return;
-    table.querySelectorAll('tbody tr').forEach(tr => {
-      const tds = tr.querySelectorAll('td');
-      if (tds[colIdx]) { tds[colIdx].textContent = ''; cellsCleared++; }
-    });
-  });
-  return { hrefRemoved, cellsCleared };
+  }
+
+  return { hrefRemoved, cellsCleared, enabledRules: enabled };
 }
 
 // ────── Production hash ──────
@@ -1743,7 +1892,10 @@ function renderLineDiff(diff) {
   return { left: left.join(''), right: right.join('') };
 }
 
-function applyAllRules(html, baseUrl) {
+function applyAllRules(html, baseUrl, siteId) {
+  // 自動推斷 siteId（如果沒傳）
+  if (siteId === undefined) siteId = inferSiteId(baseUrl);
+
   // 路徑 A：production filterAndConvertHtml（通用清洗，不含站點規則）
   // 這份結果對應入庫的 content / markdown
   const beforeDoc = new DOMParser().parseFromString(html, 'text/html');
@@ -1755,7 +1907,7 @@ function applyAllRules(html, baseUrl) {
   // 這份結果用於 hash 計算
   const afterDoc = new DOMParser().parseFromString(html, 'text/html');
   applyProductionCleanup(afterDoc, baseUrl);
-  const { hrefRemoved, cellsCleared } = applySiteRules(afterDoc);
+  const { hrefRemoved, cellsCleared, enabledRules } = applySiteRules(afterDoc, siteId);
   const afterHtml = docToFilteredHtml(afterDoc);
   const afterMarkdown = docToMarkdown(afterDoc);
 
@@ -1766,6 +1918,8 @@ function applyAllRules(html, baseUrl) {
     beforeMarkdown,
     hrefRemoved,
     cellsCleared,
+    siteId,
+    enabledRules,
   };
 }
 
@@ -1778,10 +1932,18 @@ function render(jsonData) {
 
   // Meta
   const metaList = document.getElementById('metaList');
+  const siteId = applied.siteId;
+  const enabledRules = applied.enabledRules || [];
+  const siteRulesDisplay = siteId
+    ? (enabledRules.length > 0
+        ? `${siteId} (套用 ${enabledRules.length} 條規則：${enabledRules.join(', ')})`
+        : `${siteId} (無站點規則 → 跟 production filterAndConvertHtml 結果相同)`)
+    : '(無法推斷 — URL 解析失敗)';
   metaList.innerHTML = [
     ['URL', analysis.url || '(無)'],
     ['Title', analysis.title || '(無)'],
     ['HTML size', `${analysis.html.length.toLocaleString()} chars`],
+    ['Site ID (推斷)', siteRulesDisplay],
     ['偵測到 pattern 數', `${analysis.results.length}`],
   ].map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join('');
 
@@ -1847,8 +2009,34 @@ function render(jsonData) {
           <span class="value">${productionHash}</span>
           <button data-copy-hash="${productionHash}">Copy</button>
         </span>
-        <span style="font-size: 12px; color: var(--ink-faint); margin-left: 8px;">這就是 production DB 裡 crawler_documents_content.hash 欄位的值（前提是規則一致）</span>
+      </div>
+      <div class="hash-verify" style="margin-top: 12px;">
+        <span class="label">驗證 DB hash</span>
+        <input type="text" id="dbHashInput" placeholder="貼上 crawler_documents_content.hash 欄位（32 字 hex）" spellcheck="false" autocomplete="off">
+        <span class="verify-result" id="hashVerifyResult"></span>
       </div>`;
+  // Wire up hash verification
+  const dbInput = document.getElementById('dbHashInput');
+  const verifyOut = document.getElementById('hashVerifyResult');
+  if (dbInput && verifyOut) {
+    const check = () => {
+      const v = (dbInput.value || '').trim().toLowerCase();
+      if (!v) { verifyOut.textContent = ''; verifyOut.className = 'verify-result'; return; }
+      if (!/^[a-f0-9]{32}$/i.test(v)) {
+        verifyOut.textContent = '⚠ 不是有效的 md5 格式（應為 32 字 hex）';
+        verifyOut.className = 'verify-result warn';
+        return;
+      }
+      if (v === productionHash.toLowerCase()) {
+        verifyOut.textContent = '✓ Match — 跟 production DB hash 一致';
+        verifyOut.className = 'verify-result match';
+      } else {
+        verifyOut.textContent = '✗ Mismatch — 跟 analyzer 算出來的不同';
+        verifyOut.className = 'verify-result mismatch';
+      }
+    };
+    dbInput.addEventListener('input', check);
+  }
   // Wire up copy button (event delegation safer than inline onclick)
   document.querySelectorAll('[data-copy-hash]').forEach(btn => {
     btn.onclick = async () => {
@@ -2597,6 +2785,19 @@ function renderCompareResults({ countA, countB, indexedA, indexedB, sameHash, di
   // Stash full results for export
   window._compareResults = { countA, countB, indexedA, indexedB, sameHash, diffHash, onlyA, onlyB, elapsed };
 
+  // Wire up suggestion copy buttons
+  document.querySelectorAll('.suggestion-copy[data-snippet]').forEach(btn => {
+    btn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.snippet);
+        const orig = btn.textContent;
+        btn.textContent = 'Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1200);
+      } catch (e) {}
+    };
+  });
+
   // Wire up export buttons
   const exportCsv = document.getElementById('exportCsvBtn');
   if (exportCsv) exportCsv.onclick = () => downloadFile(buildCsvReport(window._compareResults), 'compare-report.csv', 'text/csv');
@@ -2710,9 +2911,53 @@ function addToCluster(clusters, key, examples, url) {
   }
 }
 
+// 把 normalized pattern 轉成可執行的 regex
+// 例：「您是第<NUM>位瀏覽者」→ /您是第\d[\d,]*位瀏覽者/g
+function patternToRegex(pattern) {
+  // 先 escape 整個 pattern 的 regex 特殊字元
+  let regex = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 再把佔位符 token 換回實際 regex
+  regex = regex
+    .replace(/<NUM>/g, '\\d[\\d,]*')
+    .replace(/<DATE>/g, '\\d{4}[-\\/.]\\d{1,2}[-\\/.]\\d{1,2}')
+    .replace(/<TIME>/g, '\\d{1,2}:\\d{2}(?::\\d{2})?')
+    .replace(/<HASH>/g, '[a-f0-9]{32}');
+  return `/${regex}/g`;
+}
+
+// 從 cluster pattern 推測有意義的 keyword 當 rule name 用
+function suggestRuleName(pattern) {
+  // 抽出最長的連續中文片段當作關鍵字提示
+  const chineseRuns = pattern.match(/[一-鿿]+/g) || [];
+  const longest = chineseRuns.sort((a, b) => b.length - a.length)[0] || '';
+  if (!longest) return 'stripCustomInline';
+  // 樣本：「瀏覽者」→ stripVisitorCounter; 「更新日期」→ stripUpdateDate
+  return 'strip_' + longest;
+}
+
 function renderSuggestion(s, idx) {
   const num = String(idx + 1).padStart(2, '0');
   const examplesHtml = s.examples.map(ex => `<div class="suggestion-example">${escapeHtml(ex)}</div>`).join('');
+  const generatedRegex = patternToRegex(s.pattern);
+  const ruleName = suggestRuleName(s.pattern);
+  // 對 production 加 inline regex 的 code snippet
+  const inlineSnippet = `// 在 utils/crawler.js 的 inline regex 段加：
+filteredHtml = filteredHtml.replace(
+    ${generatedRegex},
+    ""
+);`;
+  // 對 site-rules 加 site rule 的 code snippet
+  const siteRuleSnippet = `// 在 utils/crawler/rules/common-rules.js 新增 rule:
+${ruleName}: {
+    description: "...",
+    apply: ($) => {
+        // 你可能要操作 cheerio DOM 而非 string regex
+        // 範例：直接對 HTML 字串 (但這個機制目前不支援，僅供示意)
+    }
+},
+// 然後在 site-rules.js 啟用:
+{ rule: "${ruleName}" }`;
+
   return `
     <article class="suggestion-card">
       <div class="suggestion-head">
@@ -2725,8 +2970,23 @@ function renderSuggestion(s, idx) {
       <div class="suggestion-pattern">${escapeHtml(s.pattern)}</div>
       <div class="suggestion-examples-label">實際出現的範例：</div>
       <div class="suggestion-examples">${examplesHtml}</div>
+      <div class="suggestion-actions">
+        <div class="suggestion-action">
+          <div class="suggestion-action-label">建議 regex（最直接，加在 production filterAndConvertHtml 的 inline regex 段）</div>
+          <div class="suggestion-snippet">
+            <code class="suggestion-code">${escapeHtml(generatedRegex)}</code>
+            <button class="suggestion-copy" data-snippet="${escapeAttr(generatedRegex)}">Copy regex</button>
+          </div>
+          <pre class="suggestion-block">${escapeHtml(inlineSnippet)}</pre>
+          <button class="suggestion-copy" data-snippet="${escapeAttr(inlineSnippet)}">Copy full snippet</button>
+        </div>
+      </div>
     </article>
   `;
+}
+
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 // ────── Batch drawer (drill-down detail) ──────

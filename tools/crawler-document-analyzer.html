@@ -2627,6 +2627,7 @@ async function runCompare() {
     indexedA: indexA.size,
     indexedB: indexB.size,
     sameHash, diffHash, onlyA, onlyB, elapsed,
+    indexA, indexB,
   });
 }
 
@@ -2668,7 +2669,143 @@ async function sha256(str) {
   return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function renderCompareResults({ countA, countB, indexedA, indexedB, sameHash, diffHash, onlyA, onlyB, elapsed }) {
+// ────── Crawler Coverage Report ──────
+// 偵測「整類 URL 漂移」(爬蟲遍歷不穩定)，例如 yak.tw：
+//   work2017: 280 (A) → 0 (B), work2015: 0 (A) → 502 (B)
+function categorizeUrl(url) {
+  try {
+    const u = new URL(url);
+    const segs = u.pathname.split('/').filter(Boolean);
+    if (segs.length === 0) return u.hostname + '/';
+    if (segs.length === 1) return u.hostname + '/' + segs[0];
+    return u.hostname + '/' + segs[0] + '/' + segs[1];
+  } catch (e) {
+    return '?';
+  }
+}
+
+function generateCoverageReport(indexA, indexB, onlyA, onlyB) {
+  // 統計每個 category 在 A / B 各有多少個 URL
+  const catA = new Map();
+  const catB = new Map();
+  for (const url of indexA.keys()) {
+    const c = categorizeUrl(url);
+    catA.set(c, (catA.get(c) || 0) + 1);
+  }
+  for (const url of indexB.keys()) {
+    const c = categorizeUrl(url);
+    catB.set(c, (catB.get(c) || 0) + 1);
+  }
+
+  const allCats = new Set([...catA.keys(), ...catB.keys()]);
+  const rows = [];
+  for (const c of allCats) {
+    const a = catA.get(c) || 0;
+    const b = catB.get(c) || 0;
+    const max = Math.max(a, b);
+    const min = Math.min(a, b);
+    let kind = null;
+    if (max >= 10 && min === 0) kind = 'vanished';      // 整類消失/新增
+    else if (max >= 10 && max / Math.max(min, 1) >= 10) kind = 'skewed';  // 數量懸殊
+    rows.push({ category: c, a, b, diff: b - a, abs: Math.abs(b - a), kind });
+  }
+
+  // 抽出 skewed/vanished rows
+  const skewedRows = rows.filter(r => r.kind).sort((x, y) => y.abs - x.abs);
+
+  // 估算「不穩定影響」：所有 skewed rows 加總的 |b - a|
+  const instabilityCount = skewedRows.reduce((s, r) => s + r.abs, 0);
+  const totalOnly = onlyA.length + onlyB.length;
+  const instabilityRatio = totalOnly > 0 ? instabilityCount / totalOnly : 0;
+
+  return {
+    catCount: allCats.size,
+    catRows: rows.sort((x, y) => (y.a + y.b) - (x.a + x.b)),
+    skewedRows,
+    instabilityCount,
+    instabilityRatio,
+    isCrawlerUnstable: instabilityRatio >= 0.3 && skewedRows.length >= 2,
+  };
+}
+
+function renderCoverageReport(report, indexA, indexB) {
+  if (!report.isCrawlerUnstable && report.skewedRows.length === 0) return '';
+
+  const severity = report.instabilityRatio >= 0.7 ? 'high'
+                 : report.instabilityRatio >= 0.4 ? 'mid'
+                 : 'low';
+
+  const bannerColor = severity === 'high' ? '#B45309' : severity === 'mid' ? '#B45309' : '#6B6258';
+  const bannerBg = severity === 'high' ? 'rgba(180, 83, 9, 0.10)' : severity === 'mid' ? 'rgba(180, 83, 9, 0.06)' : 'rgba(107, 98, 88, 0.06)';
+
+  const rowsHtml = report.skewedRows.slice(0, 20).map(r => {
+    const tag = r.kind === 'vanished'
+      ? (r.a === 0 ? '<span style="font-family: var(--mono); font-size: 10px; color: var(--solved); padding: 2px 6px; background: var(--solved-bg); border-radius: 2px;">整類新增</span>'
+                   : '<span style="font-family: var(--mono); font-size: 10px; color: var(--open); padding: 2px 6px; background: var(--open-bg); border-radius: 2px;">整類消失</span>')
+      : '<span style="font-family: var(--mono); font-size: 10px; color: var(--observing); padding: 2px 6px; background: var(--observing-bg); border-radius: 2px;">數量懸殊 ≥10×</span>';
+    const arrow = r.a > 0 && r.b > 0 ? '→' : '';
+    return `
+      <tr>
+        <td><code style="font-size: 12px;">${escapeHtml(r.category)}</code></td>
+        <td class="num">${r.a}</td>
+        <td class="num">${r.b}</td>
+        <td class="num"><strong>${r.diff > 0 ? '+' : ''}${r.diff}</strong></td>
+        <td>${tag}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const showingNote = report.skewedRows.length > 20
+    ? `<p style="font-size: 12px; color: var(--ink-faint); margin: 8px 0 0;">… 另有 ${report.skewedRows.length - 20} 個漂移分類未顯示</p>`
+    : '';
+
+  return `
+    <div class="section-num">§ Coverage · 爬蟲穩定度</div>
+    <h2>Crawler Coverage Report</h2>
+
+    <div style="background: ${bannerBg}; border-left: 4px solid ${bannerColor}; padding: 14px 18px; border-radius: 3px; margin: 12px 0 20px;">
+      <div style="font-size: 14px; font-weight: 600; color: ${bannerColor}; margin-bottom: 6px;">
+        ${report.isCrawlerUnstable ? '⚠️ 爬蟲遍歷可能不穩定' : 'ℹ️ 偵測到部分分類漂移'}
+      </div>
+      <div style="font-size: 13px; color: var(--ink-quiet); line-height: 1.55;">
+        <strong>${report.skewedRows.length}</strong> 個 URL 分類在兩天爬到的數量差異 ≥ 10 倍（或整類缺失），共影響
+        <strong>${report.instabilityCount.toLocaleString()}</strong> 個 URL，
+        佔 only-A/only-B 總量的 <strong>${(report.instabilityRatio * 100).toFixed(0)}%</strong>。<br>
+        ${report.isCrawlerUnstable
+          ? '<span style="color: ' + bannerColor + ';">這通常不是「內容真的被新增/刪除」，而是爬蟲在兩天的遍歷路徑不同</span>（例如 BFS 順序、深度限制、被 rate limit、首頁清單動態變化等）。建議檢查爬蟲決定性。'
+          : '可能是真實異動，但建議檢查為什麼某些分類兩邊數量差這麼多。'}
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50%;">URL 分類（host + 前 2 段 path）</th>
+            <th style="width: 12%; text-align: right;">A 數量</th>
+            <th style="width: 12%; text-align: right;">B 數量</th>
+            <th style="width: 12%; text-align: right;">B − A</th>
+            <th style="width: 14%;">狀態</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+    ${showingNote}
+
+    <div class="note" style="margin: 16px 0 24px;">
+      <span class="note-label">建議行動</span>
+      <p style="line-height: 1.7;">
+        <strong>1. 不要立刻把 only-A 視為「真的下架」</strong> — 它們很可能下次爬蟲就會回來。<br>
+        <strong>2. 在 processCrawlerFiles 加入「刪除上限」保護</strong> — 例如「單次同步刪除 > 30% 則暫停刪除，等人工確認」。<br>
+        <strong>3. 修爬蟲決定性</strong>：用 sitemap.xml / 寫死 seed list / URL 字典序拓展，取代純 BFS。<br>
+        <strong>4. 對「全抓」站點額外觀察</strong>：列出已知 traversal 不穩定的站點，套用更寬鬆的刪除策略。
+      </p>
+    </div>
+  `;
+}
+
+function renderCompareResults({ countA, countB, indexedA, indexedB, sameHash, diffHash, onlyA, onlyB, elapsed, indexA, indexB }) {
   const resultsEl = document.getElementById('compareResults');
   const total = sameHash.length + diffHash.length + onlyA.length + onlyB.length;
   const cleanRatio = total > 0 ? ((sameHash.length / (sameHash.length + diffHash.length)) * 100).toFixed(1) : '—';
@@ -2729,6 +2866,12 @@ function renderCompareResults({ countA, countB, indexedA, indexedB, sameHash, di
       <button id="exportJsonBtn">JSON</button>
     </div>
   `;
+
+  // Coverage report (爬蟲穩定度 — 當 only-A/B 很多時特別有用)
+  if ((onlyA.length + onlyB.length) >= 20) {
+    const coverageReport = generateCoverageReport(indexA, indexB, onlyA, onlyB);
+    html += renderCoverageReport(coverageReport, indexA, indexB);
+  }
 
   // Rule suggestion section (基於 DIFF 自動建議新規則)
   if (diffHash.length > 0) {

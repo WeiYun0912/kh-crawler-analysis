@@ -17,6 +17,7 @@ chrome.action.onClicked.addListener(async (tab) => {
         await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             files: ['inspector.js'],
+            world: 'MAIN',  // 在 page world 跑，方便載入 turndown/md5 等外部 lib
         });
     } catch (e) {
         console.error('[Crawler Noise Inspector] inject failed:', e);
